@@ -135,6 +135,14 @@ class CSC(salobj.BaseCsc):
     async def do_enable(self, id_data):
         """Transition from `State.DISABLED` to `State.ENABLED`.
 
+        Override superclass method. The CSC needs to connect to the hardware
+        controller which, is done via a coroutine. This method takes some time
+        to run and the CSC cannot finalize the transition until the connection is
+        complete. If the regular method begin_enable is used, the CSC will block
+        and won't publish the heartbeat, which will seem like the it disappeared
+        from the system.
+
+
         Parameters
         ----------
         id_data : `CommandIdData`
@@ -178,6 +186,9 @@ class CSC(salobj.BaseCsc):
         """End do_disable; called after state changes
         but before command acknowledged.
 
+        Schedule disconnect from model controller to the event loop, specify that a new
+        connection will be required when enabling and set detailed state.
+
         Parameters
         ----------
         id_data : `CommandIdData`
@@ -191,6 +202,8 @@ class CSC(salobj.BaseCsc):
         """End do_enable; called after state changes
         but before command acknowledged.
 
+        Set detailed state.
+
         Parameters
         ----------
         id_data : `CommandIdData`
@@ -201,6 +214,8 @@ class CSC(salobj.BaseCsc):
     def end_exitControl(self, id_data):
         """End do_exitControl; called after state changes
         but before command acknowledged.
+
+        Set detailed state.
 
         Parameters
         ----------
@@ -213,6 +228,8 @@ class CSC(salobj.BaseCsc):
         """End do_standby; called after state changes
         but before command acknowledged.
 
+        Set detailed state.
+
         Parameters
         ----------
         id_data : `CommandIdData`
@@ -223,6 +240,8 @@ class CSC(salobj.BaseCsc):
     def end_start(self, id_data):
         """End do_start; called after state changes
         but before command acknowledged.
+
+        Set detailed state.
 
         Parameters
         ----------

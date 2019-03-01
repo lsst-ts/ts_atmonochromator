@@ -1,6 +1,6 @@
-# This file is part of ts_pymonochromator.
+# This file is part of ts_atmonochromator.
 #
-# Developed for the LSST Data Management System.
+# Developed for the LSST Telescope and Site System.
 # This product includes software developed by the LSST Project
 # (https://www.lsst.org).
 # See the COPYRIGHT file at the top-level directory of this distribution
