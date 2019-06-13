@@ -74,7 +74,9 @@ class MockMonochromatorController:
         """Start the TCP/IP server, set start_task Done
         and start the command loop.
         """
-        self._server = await asyncio.start_server(self.cmd_loop, host="127.0.0.1", port=self.port)
+        self._server = await asyncio.start_server(self.cmd_loop,
+                                                  host="127.0.0.1",
+                                                  port=self.port)
 
     async def stop(self, timeout=5):
         """Stop the TCP/IP server.
@@ -142,7 +144,7 @@ class MockMonochromatorController:
 
         try:
             new_wl = float(args[0])
-        except Exception as e:
+        except Exception:
             return self.rejected
 
         if not (self.wavelength_range[0] <= new_wl <= self.wavelength_range[1]):
@@ -150,7 +152,8 @@ class MockMonochromatorController:
 
         self.busy = True
 
-        # Give control back to event loop for responsiveness and to simulate action
+        # Give control back to event loop for responsiveness and to simulate
+        # action
         await asyncio.sleep(self.wait_time)
 
         self.wavelength = new_wl + self.wavelength_offset
@@ -193,7 +196,7 @@ class MockMonochromatorController:
 
         try:
             new_gr = int(args[0])
-        except Exception as e:
+        except Exception:
             return self.rejected
 
         if new_gr not in self.grating_options:
@@ -201,7 +204,8 @@ class MockMonochromatorController:
 
         self.busy = True
 
-        # Give control back to event loop for responsiveness and to simulate action
+        # Give control back to event loop for responsiveness and to simulate
+        # action
         await asyncio.sleep(self.wait_time)
 
         self.grating = new_gr
@@ -236,7 +240,7 @@ class MockMonochromatorController:
 
         try:
             new_ens = float(args[0])
-        except Exception as e:
+        except Exception:
             return self.rejected
 
         if not (self.entrance_slit_range[0] <= new_ens <= self.entrance_slit_range[1]):
@@ -244,7 +248,8 @@ class MockMonochromatorController:
 
         self.busy = True
 
-        # Give control back to event loop for responsiveness and to simulate action
+        # Give control back to event loop for responsiveness and to simulate
+        # action
         await asyncio.sleep(self.wait_time)
 
         self.entrance_slit_position = new_ens
@@ -279,7 +284,7 @@ class MockMonochromatorController:
 
         try:
             new_exs = float(args[0])
-        except Exception as e:
+        except Exception:
             return self.rejected
 
         if not (self.exit_slit_range[0] <= new_exs <= self.exit_slit_range[1]):
@@ -287,7 +292,8 @@ class MockMonochromatorController:
 
         self.busy = True
 
-        # Give control back to event loop for responsiveness and to simulate action
+        # Give control back to event loop for responsiveness and to
+        # simulate action
         await asyncio.sleep(self.wait_time)
 
         self.exit_slit_position = new_exs
@@ -324,10 +330,14 @@ class MockMonochromatorController:
 
         try:
             new_offset = float(args[0])
-        except Exception as e:
+        except Exception:
             return self.rejected
 
-        if not (self.exit_slit_position[0] <= self.wavelength + new_offset <= self.exit_slit_position[1]):
+        exit_0 = self.exit_slit_position[0]
+        exit_1 = self.exit_slit_position[1]
+        new_w = self.wavelength + new_offset
+
+        if not (exit_0 <= new_w <= exit_1):
             return self.our
 
         self.busy = True
@@ -345,8 +355,8 @@ class MockMonochromatorController:
         Parameters
         ----------
         args : str
-            A string of number that can be converted to an int. Must be equal to 1 or it will
-            be rejected.
+            A string of number that can be converted to an int. Must be equal
+            to 1 or it will be rejected.
 
         Returns
         -------
@@ -442,7 +452,7 @@ class MockMonochromatorController:
             if retval != self.ok:
                 return retval
 
-        except Exception as e:
+        except Exception:
 
             return self.rejected
         else:
