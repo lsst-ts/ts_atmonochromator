@@ -1,0 +1,14 @@
+host: "127.0.0.1"
+port: 50000
+connection_timeout: 10
+read_timeout: 10
+write_timeout: 10
+wavelength_gr1: 320.
+wavelength_gr1_gr2: 800.
+wavelength_gr2: 1130.
+min_slit_width: 0.
+max_slit_width: 7.
+min_wavelength: 320.
+max_wavelength: 1130.
+period: 1.
+timeout: 5.
