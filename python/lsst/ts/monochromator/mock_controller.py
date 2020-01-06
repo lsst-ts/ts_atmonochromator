@@ -1,9 +1,27 @@
-__all__ = ["MockMonochromatorController"]
+__all__ = ["MockMonochromatorController", "SimulationConfiguration"]
 
 import asyncio
 import logging
 
-from .model import MonochromatorStatus
+from lsst.ts.idl.enums.ATMonochromator import Status as MonochromatorStatus
+
+
+class SimulationConfiguration:
+    def __init__(self):
+        self.host = "127.0.0.1"
+        self.port = 50000
+        self.connection_timeout = 10.
+        self.read_timeout = 10.
+        self.write_timeout = 10.
+        self.wavelength_gr1 = 320.
+        self.wavelength_gr1_gr2 = 800.
+        self.wavelength_gr2 = 1130.
+        self.min_slit_width = 0.
+        self.max_slit_width = 7.
+        self.min_wavelength = 320.
+        self.max_wavelength = 1130.
+        self.period = 1.
+        self.timeout = 5.
 
 
 class MockMonochromatorController:
@@ -12,15 +30,10 @@ class MockMonochromatorController:
     The Monochromator TCP Protocol is specified here:
     https://confluence.lsstcorp.org/display/LTS/Monochromator+TCP+Protocol
 
-    Parameters
-    ----------
-    port : int
-        TCP/IP port
-
     """
 
-    def __init__(self, port):
-        self.port = port
+    def __init__(self):
+        self.config = SimulationConfiguration()
 
         self.log = logging.getLogger("MockMonochromatorController")
 
@@ -36,17 +49,14 @@ class MockMonochromatorController:
 
         self.controller_busy = False
 
-        self.wavelength_range = (320., 1130.)  # wavelength range in nm
         self.wavelength = 320.
         self.wavelength_offset = 0.
 
         self.grating_options = (0, 1, 2)
         self.grating = 0
 
-        self.entrance_slit_range = (0., 7.)  # entrance slit range in mm
         self.entrance_slit_position = 0.
 
-        self.exit_slit_range = (0., 7.)  # entrance slit range in mm
         self.exit_slit_position = 0.
 
         # responses to commands:
@@ -70,13 +80,27 @@ class MockMonochromatorController:
                       "?SWST": self.get_swst,
                       }
 
+    @property
+    def exit_slit_range(self):
+        return self.config.min_slit_width, self.config.max_slit_width
+
+    @property
+    def entrance_slit_range(self):
+        return self.config.min_slit_width, self.config.max_slit_width
+
+    @property
+    def wavelength_range(self):
+        return self.config.min_wavelength, self.config.min_wavelength
+
     async def start(self):
         """Start the TCP/IP server, set start_task Done
         and start the command loop.
         """
+        self.status = MonochromatorStatus.SETTING_UP
         self._server = await asyncio.start_server(self.cmd_loop,
-                                                  host="127.0.0.1",
-                                                  port=self.port)
+                                                  host=self.config.host,
+                                                  port=self.config.port)
+        self.status = MonochromatorStatus.READY
 
     async def stop(self, timeout=5):
         """Stop the TCP/IP server.
@@ -88,6 +112,7 @@ class MockMonochromatorController:
         self._server = None
         server.close()
         await asyncio.wait_for(server.wait_closed(), timeout=timeout)
+        MonochromatorStatus.OFFLINE
 
     async def cmd_loop(self, reader, writer):
         self.log.info("cmd_loop begins")
@@ -383,7 +408,7 @@ class MockMonochromatorController:
             return self.rejected
 
         self.log.debug("Starting rst")
-        self.status = MonochromatorStatus.SETTINGUP
+        self.status = MonochromatorStatus.SETTING_UP
         self.busy = True
 
         await asyncio.sleep(self.wait_time)
