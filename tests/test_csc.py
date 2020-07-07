@@ -41,11 +41,11 @@ LONG_LONG_TIMEOUT = 120.
 
 
 class Harness:
-    def __init__(self, initial_simulation_mode=0, config_dir=None):
+    def __init__(self, simulation_mode=0, config_dir=None):
 
         self.log = logging.getLogger("harness")
 
-        self.csc = csc.CSC(initial_simulation_mode=initial_simulation_mode,
+        self.csc = csc.CSC(simulation_mode=simulation_mode,
                            config_dir=config_dir)
         self.remote = salobj.Remote(self.csc.domain, "ATMonochromator")
 
@@ -89,7 +89,7 @@ class TestATMonochromatorCSC(asynctest.TestCase):
         * exitControl: STANDBY, FAULT to OFFLINE (quit)
         """
 
-        async with Harness(initial_simulation_mode=1) as harness:
+        async with Harness(simulation_mode=1) as harness:
 
             commands = ("start", "enable", "disable", "exitControl", "standby",
                         "changeWavelength", "calibrateWavelength", "power", "selectGrating",
