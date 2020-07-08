@@ -58,7 +58,7 @@ class CSC(salobj.ConfigurableCsc):
         The initial state of the CSC. This is provided for unit testing,
         as real CSCs should start up in `lsst.ts.salobj.StateSTANDBY`,
         the default.
-    initial_simulation_mode : `int` (optional)
+    simulation_mode : `int` (optional)
         Initial simulation mode.
 
     Notes
@@ -94,7 +94,7 @@ class CSC(salobj.ConfigurableCsc):
     """
 
     def __init__(self, config_dir=None, initial_state=salobj.State.STANDBY,
-                 initial_simulation_mode=0):
+                 simulation_mode=0):
         self._detailed_state = None
 
         schema_path = pathlib.Path(__file__).resolve().parents[4].joinpath("schema",
@@ -103,7 +103,7 @@ class CSC(salobj.ConfigurableCsc):
         super().__init__("ATMonochromator", index=0,
                          schema_path=schema_path,
                          config_dir=config_dir, initial_state=initial_state,
-                         initial_simulation_mode=initial_simulation_mode)
+                         simulation_mode=simulation_mode)
 
         self.detailed_state = ATMonochromator.DetailedState.NOT_ENABLED
 
