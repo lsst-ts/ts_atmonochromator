@@ -1,4 +1,4 @@
-__all__ = ["MockMonochromatorController", "SimulationConfiguration"]
+__all__ = ["MockController", "SimulationConfiguration"]
 
 import asyncio
 import logging
@@ -9,7 +9,7 @@ from lsst.ts.idl.enums.ATMonochromator import Status as MonochromatorStatus
 class SimulationConfiguration:
     def __init__(self):
         self.host = "127.0.0.1"
-        self.port = 50000
+        self.port = 0
         self.connection_timeout = 10.0
         self.read_timeout = 10.0
         self.write_timeout = 10.0
@@ -24,28 +24,24 @@ class SimulationConfiguration:
         self.timeout = 5.0
 
 
-class MockMonochromatorController:
-    """Mock Monochromator Controller that talks over TCP/IP.
+class MockController:
+    """Mock Monochromator low-level controller that talks over TCP/IP.
 
     The Monochromator TCP Protocol is specified here:
     https://confluence.lsstcorp.org/display/LTS/Monochromator+TCP+Protocol
-
     """
 
     def __init__(self):
         self.config = SimulationConfiguration()
 
-        self.log = logging.getLogger("MockMonochromatorController")
+        self.log = logging.getLogger("MockController")
 
-        self._server = None
+        self.server = None
 
         self.wait_time = 0.1
 
+        # Status of the monochromator controller.
         self.status = MonochromatorStatus.OFFLINE
-        """Status of the monochromator controller.
-        Must be one of:
-            0 for SettingUp, 1 for Ready, 2 for Offline, 3 for Fault.
-        """
 
         self.controller_busy = False
 
@@ -98,18 +94,27 @@ class MockMonochromatorController:
         and start the command loop.
         """
         self.status = MonochromatorStatus.SETTING_UP
-        self._server = await asyncio.start_server(
-            self.cmd_loop, host=self.config.host, port=self.config.port
+        self.server = await asyncio.start_server(
+            self.cmd_loop, host=self.config.host, port=0
+        )
+        num_sockets = len(self.server.sockets)
+        if num_sockets != 1:
+            raise RuntimeError(
+                "Listening on more than one socket; cannot determine port"
+            )
+        self.port = self.server.sockets[0].getsockname()[1]
+        self.log.info(
+            f"MockController server running: host={self.config.host}; port={self.port}"
         )
         self.status = MonochromatorStatus.READY
 
     async def stop(self, timeout=5):
         """Stop the TCP/IP server."""
-        if self._server is None:
+        if self.server is None:
             return
 
-        server = self._server
-        self._server = None
+        server = self.server
+        self.server = None
         server.close()
         await asyncio.wait_for(server.wait_closed(), timeout=timeout)
         MonochromatorStatus.OFFLINE
@@ -435,31 +440,32 @@ class MockMonochromatorController:
         return self.ok
 
     async def set_set(self, args):
-        """Setup all parameters in the following order:
-        "Wavelength Grating FrontEntranceSlitWidth FrontExitSlitWidth"
+        """Set all parameters.
 
         Parameters
         ----------
         args : list(str)
-            A list with the values for each parameter to set. A total of four
-            items is expected;
-                Wavelength, in nm
-                Grating
-                FrontEntranceSlitWidth, in mm
-                FrontExitSlitWidth, im mm
+            A list with the following values:
 
+            * wavelength, in nm
+            * grating name
+            * front entrance slit width, in mm
+            * front exit slit width, im mm
 
         Returns
         -------
         result : str
-            Response to the set command:
-                #OK - Accepted command
-                #OUR - Out of range
-                ?? - Invalid command
-                #BUSY - Device busy executing another command
-                #RJCT - Rejected
+            Response to the set command; one of:
 
+            * #OK - Accepted command
+            * #OUR - Out of range
+            * ?? - Invalid command
+            * #BUSY - Device busy executing another command
+            * #RJCT - Rejected
         """
+        if len(args) != 4:
+            return self.rejected
+
         try:
             retval = await self.set_wl(args)
             if retval != self.ok:

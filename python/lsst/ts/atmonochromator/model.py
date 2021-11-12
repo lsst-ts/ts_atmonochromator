@@ -7,9 +7,6 @@ from lsst.ts.idl.enums.ATMonochromator import Status as MonochromatorStatus
 
 __all__ = ["Model", "ModelReply"]
 
-_LOCAL_HOST = "127.0.0.1"
-_DEFAULT_PORT = 50000
-
 
 class ModelReply(enum.Enum):
     OK = "#OK"
@@ -29,8 +26,6 @@ class Model:
 
         self.log = log
 
-        self.host = _LOCAL_HOST
-        self.port = _DEFAULT_PORT
         self.connection_timeout = 10.0
         self.read_timeout = 10.0
         self.move_timeout = 60.0
@@ -44,17 +39,17 @@ class Model:
         self.cmd_lock = asyncio.Lock()
         self.controller_ready = False
 
-    async def connect(self):
+    async def connect(self, host, port):
         """Connect to the spectrograph controller's TCP/IP port."""
-        self.log.debug(f"connecting to: {self.host}:{self.port}")
+        self.log.debug(f"connecting to: {host}:{port}")
         if self.connected:
             raise RuntimeError("Already connected")
-        self.connect_task = asyncio.open_connection(host=self.host, port=self.port)
+        self.connect_task = asyncio.open_connection(host=host, port=port)
         self.reader, self.writer = await asyncio.wait_for(
             self.connect_task, timeout=self.connection_timeout
         )
 
-        self.log.debug(f"connected")
+        self.log.debug("connected")
 
     async def disconnect(self):
         """Disconnect from the spectrograph controller's TCP/IP port."""
