@@ -10,18 +10,18 @@ class SimulationConfiguration:
     def __init__(self):
         self.host = "127.0.0.1"
         self.port = 50000
-        self.connection_timeout = 10.
-        self.read_timeout = 10.
-        self.write_timeout = 10.
-        self.wavelength_gr1 = 320.
-        self.wavelength_gr1_gr2 = 800.
-        self.wavelength_gr2 = 1130.
-        self.min_slit_width = 0.
-        self.max_slit_width = 7.
-        self.min_wavelength = 320.
-        self.max_wavelength = 1130.
-        self.period = 1.
-        self.timeout = 5.
+        self.connection_timeout = 10.0
+        self.read_timeout = 10.0
+        self.write_timeout = 10.0
+        self.wavelength_gr1 = 320.0
+        self.wavelength_gr1_gr2 = 800.0
+        self.wavelength_gr2 = 1130.0
+        self.min_slit_width = 0.0
+        self.max_slit_width = 7.0
+        self.min_wavelength = 320.0
+        self.max_wavelength = 1130.0
+        self.period = 1.0
+        self.timeout = 5.0
 
 
 class MockMonochromatorController:
@@ -39,7 +39,7 @@ class MockMonochromatorController:
 
         self._server = None
 
-        self.wait_time = .1
+        self.wait_time = 0.1
 
         self.status = MonochromatorStatus.OFFLINE
         """Status of the monochromator controller.
@@ -49,15 +49,15 @@ class MockMonochromatorController:
 
         self.controller_busy = False
 
-        self.wavelength = 320.
-        self.wavelength_offset = 0.
+        self.wavelength = 320.0
+        self.wavelength_offset = 0.0
 
         self.grating_options = (0, 1, 2)
         self.grating = 0
 
-        self.entrance_slit_position = 0.
+        self.entrance_slit_position = 0.0
 
-        self.exit_slit_position = 0.
+        self.exit_slit_position = 0.0
 
         # responses to commands:
         self.ok = "#OK"  # Accepted command
@@ -66,19 +66,20 @@ class MockMonochromatorController:
         self.busy = "#BUSY"  # Device busy executing another command
         self.rejected = "#RJCT"  # Rejected
 
-        self._cmds = {"!WL": self.set_wl,
-                      "!GR": self.set_gr,
-                      "!ENS": self.set_ens,
-                      "!EXS": self.set_exs,
-                      "!CLW": self.set_clw,
-                      "!RST": self.set_rst,
-                      "!SET": self.set_set,
-                      "?WL": self.get_wl,
-                      "?GR": self.get_gr,
-                      "?ENS": self.get_ens,
-                      "?EXS": self.get_exs,
-                      "?SWST": self.get_swst,
-                      }
+        self._cmds = {
+            "!WL": self.set_wl,
+            "!GR": self.set_gr,
+            "!ENS": self.set_ens,
+            "!EXS": self.set_exs,
+            "!CLW": self.set_clw,
+            "!RST": self.set_rst,
+            "!SET": self.set_set,
+            "?WL": self.get_wl,
+            "?GR": self.get_gr,
+            "?ENS": self.get_ens,
+            "?EXS": self.get_exs,
+            "?SWST": self.get_swst,
+        }
 
     @property
     def exit_slit_range(self):
@@ -97,14 +98,13 @@ class MockMonochromatorController:
         and start the command loop.
         """
         self.status = MonochromatorStatus.SETTING_UP
-        self._server = await asyncio.start_server(self.cmd_loop,
-                                                  host=self.config.host,
-                                                  port=self.config.port)
+        self._server = await asyncio.start_server(
+            self.cmd_loop, host=self.config.host, port=self.config.port
+        )
         self.status = MonochromatorStatus.READY
 
     async def stop(self, timeout=5):
-        """Stop the TCP/IP server.
-        """
+        """Stop the TCP/IP server."""
         if self._server is None:
             return
 
@@ -415,7 +415,7 @@ class MockMonochromatorController:
 
         # reset values
         self.log.debug("Resetting wavelength")
-        self.wavelength_offset = 0.
+        self.wavelength_offset = 0.0
         self.wavelength = self.wavelength_range[0]
         await asyncio.sleep(self.wait_time)
         self.log.debug("Resetting entrance slit")

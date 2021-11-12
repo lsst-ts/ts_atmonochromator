@@ -9,7 +9,7 @@ from lsst.ts.idl.enums import ATMonochromator
 from .model import Model, ModelReply
 from .mock_controller import MockMonochromatorController, SimulationConfiguration
 
-__all__ = ['CSC']
+__all__ = ["CSC"]
 
 GENERIC_ERROR = 8200
 """Generic error code
@@ -93,17 +93,26 @@ class CSC(salobj.ConfigurableCsc):
 
     """
 
-    def __init__(self, config_dir=None, initial_state=salobj.State.STANDBY,
-                 simulation_mode=0):
+    def __init__(
+        self, config_dir=None, initial_state=salobj.State.STANDBY, simulation_mode=0
+    ):
         self._detailed_state = None
 
-        schema_path = pathlib.Path(__file__).resolve().parents[4].joinpath("schema",
-                                                                           "ATMonochromator.yaml")
+        schema_path = (
+            pathlib.Path(__file__)
+            .resolve()
+            .parents[4]
+            .joinpath("schema", "ATMonochromator.yaml")
+        )
 
-        super().__init__("ATMonochromator", index=0,
-                         schema_path=schema_path,
-                         config_dir=config_dir, initial_state=initial_state,
-                         simulation_mode=simulation_mode)
+        super().__init__(
+            "ATMonochromator",
+            index=0,
+            schema_path=schema_path,
+            config_dir=config_dir,
+            initial_state=initial_state,
+            simulation_mode=simulation_mode,
+        )
 
         self.detailed_state = ATMonochromator.DetailedState.NOT_ENABLED
 
@@ -118,8 +127,7 @@ class CSC(salobj.ConfigurableCsc):
         self.mock_ctrl_port = 50000
 
     def report_detailed_state(self):
-        """Report a new value for detailed_state, including current state.
-        """
+        """Report a new value for detailed_state, including current state."""
         self.evt_detailedState.set_put(detailedState=self.detailed_state)
 
     @property
@@ -138,8 +146,7 @@ class CSC(salobj.ConfigurableCsc):
         return self._detailed_state
 
     async def end_start(self, data):
-        """ Mark a connection to the controller and wanted.
-        """
+        """Mark a connection to the controller and wanted."""
         self.want_connection = True
         await super().end_start(data)
 
@@ -151,7 +158,7 @@ class CSC(salobj.ConfigurableCsc):
         self.report_detailed_state()
 
     def assert_ready(self, action):
-        """ Check that detailed state is READY.
+        """Check that detailed state is READY.
 
         Parameters
         ----------
@@ -164,9 +171,11 @@ class CSC(salobj.ConfigurableCsc):
             If detailed state is not READY.
         """
         if self.detailed_state != ATMonochromator.DetailedState.READY:
-            raise salobj.ExpectedError(f"{action} not allowed in detailed state "
-                                       f"{self.detailed_state!r}, expected "
-                                       f"{ATMonochromator.DetailedState.READY!r}.")
+            raise salobj.ExpectedError(
+                f"{action} not allowed in detailed state "
+                f"{self.detailed_state!r}, expected "
+                f"{ATMonochromator.DetailedState.READY!r}."
+            )
 
     @staticmethod
     def get_config_pkg():
@@ -178,12 +187,16 @@ class CSC(salobj.ConfigurableCsc):
             self.log.debug("Standard operation mode.")
             self.config = config
         elif self.simulation_mode == 1:
-            self.log.warning(f"Simulation mode {self.simulation_mode}. "
-                             f"Using SimulationConfiguration instead.")
+            self.log.warning(
+                f"Simulation mode {self.simulation_mode}. "
+                f"Using SimulationConfiguration instead."
+            )
             self.config = SimulationConfiguration()
         else:
-            raise RuntimeError(f"Unspecified simulation mode: {self.simulation_mode}. "
-                               f"Expecting either 0 or 1.")
+            raise RuntimeError(
+                f"Unspecified simulation mode: {self.simulation_mode}. "
+                f"Expecting either 0 or 1."
+            )
 
         self.evt_settingsAppliedMonoCommunication.set_put(
             ip=self.config.host,
@@ -216,8 +229,7 @@ class CSC(salobj.ConfigurableCsc):
         self.model.move_timeout = self.config.write_timeout
 
     async def end_enable(self, data):
-        """Connect to the hardware controller.
-        """
+        """Connect to the hardware controller."""
         try:
             # start connection with the controller
             if not self.model.connected:
@@ -231,39 +243,41 @@ class CSC(salobj.ConfigurableCsc):
             # Check that the hardware status is ready, otherwise go to FAULT
             controller_status = await self.model.get_status()
             if controller_status != ATMonochromator.Status.READY:
-                self.fault(code=WRONG_STAT,
-                           report=f"Controller is not ready. Current status is "
-                                  f"{controller_status!r}")
+                self.fault(
+                    code=WRONG_STAT,
+                    report=f"Controller is not ready. Current status is "
+                    f"{controller_status!r}",
+                )
             else:
                 self.evt_status.set_put(status=controller_status)
 
             wavelength = await self.model.get_wavelength()
-            self.evt_wavelength.set_put(wavelength=wavelength,
-                                        force_output=True)
+            self.evt_wavelength.set_put(wavelength=wavelength, force_output=True)
 
             grating = await self.model.get_grating()
-            self.evt_selectedGrating.set_put(gratingType=grating,
-                                             force_output=True)
+            self.evt_selectedGrating.set_put(gratingType=grating, force_output=True)
 
             entrance_slit = await self.model.get_entrance_slit()
-            self.evt_entrySlitWidth.set_put(width=entrance_slit,
-                                            force_output=True)
+            self.evt_entrySlitWidth.set_put(width=entrance_slit, force_output=True)
             self.evt_slitWidth.set_put(
                 slit=ATMonochromator.Slit.ENTRY,
                 slitPosition=entrance_slit,
-                force_output=True)
+                force_output=True,
+            )
 
             exit_slit = await self.model.get_exit_slit()
-            self.evt_exitSlitWidth.set_put(width=exit_slit,
-                                           force_output=True)
+            self.evt_exitSlitWidth.set_put(width=exit_slit, force_output=True)
             self.evt_slitWidth.set_put(
                 slit=ATMonochromator.Slit.EXIT,
                 slitPosition=exit_slit,
-                force_output=True)
+                force_output=True,
+            )
         except Exception as e:
-            self.fault(code=GENERIC_ERROR,
-                       report="Error trying to finish enable command.",
-                       traceback=traceback.format_exc())
+            self.fault(
+                code=GENERIC_ERROR,
+                report="Error trying to finish enable command.",
+                traceback=traceback.format_exc(),
+            )
             raise e
         else:
             self.detailed_state = ATMonochromator.DetailedState.READY
@@ -280,10 +294,11 @@ class CSC(salobj.ConfigurableCsc):
         """
         self.detailed_state = ATMonochromator.DetailedState.NOT_ENABLED
         try:
-            await asyncio.wait_for(self._health_loop,
-                                   timeout=self.config.connection_timeout)
+            await asyncio.wait_for(
+                self._health_loop, timeout=self.config.connection_timeout
+            )
         except asyncio.TimeoutError:
-            self.log.warning('Health monitor loop timed out. Cancelling')
+            self.log.warning("Health monitor loop timed out. Cancelling")
             self._health_loop.cancel()
             try:
                 await self._health_loop
@@ -293,12 +308,15 @@ class CSC(salobj.ConfigurableCsc):
                 self.log.error("Unexpected exception cancelling health monitor loop.")
                 self.log.exception(e)
         except Exception as e:
-            self.log.error("Unexpected exception waiting for health monitor loop to finish.")
+            self.log.error(
+                "Unexpected exception waiting for health monitor loop to finish."
+            )
             self.log.exception(e)
 
         try:
-            await asyncio.wait_for(self.model.disconnect(),
-                                   self.config.connection_timeout)
+            await asyncio.wait_for(
+                self.model.disconnect(), self.config.connection_timeout
+            )
         except asyncio.TimeoutError:
             self.log.error("Timed out waiting for model to disconnect from controller.")
         except Exception as e:
@@ -360,14 +378,11 @@ class CSC(salobj.ConfigurableCsc):
 
                 if data.slit == ATMonochromator.Slit.ENTRY:
                     new_pos = await self.model.get_entrance_slit()
-                    self.evt_entrySlitWidth.set_put(width=new_pos,
-                                                    force_output=True)
+                    self.evt_entrySlitWidth.set_put(width=new_pos, force_output=True)
                 elif data.slit == ATMonochromator.Slit.EXIT:
                     new_pos = await self.model.get_exit_slit()
-                    self.evt_exitSlitWidth.set_put(width=new_pos,
-                                                   force_output=True)
-                self.evt_slitWidth.set_put(slit=data.slit,
-                                           slitPosition=new_pos)
+                    self.evt_exitSlitWidth.set_put(width=new_pos, force_output=True)
+                self.evt_slitWidth.set_put(slit=data.slit, slitPosition=new_pos)
         except Exception as e:
             self.log.error("Error executing command 'changeSlitWidth'.")
             self.log.exception(e)
@@ -436,8 +451,7 @@ class CSC(salobj.ConfigurableCsc):
                 await self.model.wait_ready("select grating")
 
                 grating = await self.model.get_grating()
-                self.evt_selectedGrating.set_put(gratingType=grating,
-                                                 force_output=True)
+                self.evt_selectedGrating.set_put(gratingType=grating, force_output=True)
 
         except Exception as e:
             self.log.exception(e)
@@ -458,10 +472,12 @@ class CSC(salobj.ConfigurableCsc):
         self.assert_ready("updateMonochromatorSetup")
         self.detailed_state = ATMonochromator.DetailedState.UPDATING_SETUP
         try:
-            reply = await self.model.set_all(wavelength=data.wavelength,
-                                             grating=data.gratingType,
-                                             entrance_slit=data.fontEntranceSlitWidth,
-                                             exit_slit=data.fontExitSlitWidth)
+            reply = await self.model.set_all(
+                wavelength=data.wavelength,
+                grating=data.gratingType,
+                entrance_slit=data.fontEntranceSlitWidth,
+                exit_slit=data.fontExitSlitWidth,
+            )
 
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply} from controller.")
@@ -469,28 +485,26 @@ class CSC(salobj.ConfigurableCsc):
                 await self.model.wait_ready("update monochromator setup.")
 
                 wavelength = await self.model.get_wavelength()
-                self.evt_wavelength.set_put(wavelength=wavelength,
-                                            force_output=True)
+                self.evt_wavelength.set_put(wavelength=wavelength, force_output=True)
 
                 grating = await self.model.get_grating()
-                self.evt_selectedGrating.set_put(gratingType=grating,
-                                                 force_output=True)
+                self.evt_selectedGrating.set_put(gratingType=grating, force_output=True)
 
                 entrance_slit = await self.model.get_entrance_slit()
-                self.evt_entrySlitWidth.set_put(width=entrance_slit,
-                                                force_output=True)
+                self.evt_entrySlitWidth.set_put(width=entrance_slit, force_output=True)
                 self.evt_slitWidth.set_put(
                     slit=ATMonochromator.Slit.ENTRY,
                     slitPosition=entrance_slit,
-                    force_output=True)
+                    force_output=True,
+                )
 
                 exit_slit = await self.model.get_exit_slit()
-                self.evt_exitSlitWidth.set_put(width=exit_slit,
-                                               force_output=True)
+                self.evt_exitSlitWidth.set_put(width=exit_slit, force_output=True)
                 self.evt_slitWidth.set_put(
                     slit=ATMonochromator.Slit.EXIT,
                     slitPosition=exit_slit,
-                    force_output=True)
+                    force_output=True,
+                )
 
         except Exception as e:
             self.log.exception(e)
@@ -508,17 +522,21 @@ class CSC(salobj.ConfigurableCsc):
                 controller_status = await self.model.get_status()
                 self.evt_status.set_put(status=controller_status)
                 if controller_status == ATMonochromator.Status.FAULT:
-                    self.fault(code=HARDWARE_ERROR,
-                               report="Hardware controller reported FAULT.",
-                               traceback="")
+                    self.fault(
+                        code=HARDWARE_ERROR,
+                        report="Hardware controller reported FAULT.",
+                        traceback="",
+                    )
                     return
                 self.tel_timestamp.set_put(timestamp=time.time())
                 self.tel_loopTime.set_put(loopTime=time.time() - start_time)
                 await asyncio.sleep(self.heartbeat_interval)
             except Exception:
-                self.fault(code=HEALTH_LOOP_DIED,
-                           report="Health loop died for an unspecified reason.",
-                           traceback=traceback.format_exc())
+                self.fault(
+                    code=HEALTH_LOOP_DIED,
+                    report="Health loop died for an unspecified reason.",
+                    traceback=traceback.format_exc(),
+                )
                 return
 
     async def implement_simulation_mode(self, simulation_mode):
@@ -551,7 +569,8 @@ class CSC(salobj.ConfigurableCsc):
         """
         if simulation_mode not in (0, 1):
             raise salobj.ExpectedError(
-                f"Simulation_mode={simulation_mode} must be 0 or 1")
+                f"Simulation_mode={simulation_mode} must be 0 or 1"
+            )
 
         if self.simulation_mode == simulation_mode:
             return
@@ -563,7 +582,9 @@ class CSC(salobj.ConfigurableCsc):
 
         if simulation_mode == 1:
             self.mock_ctrl = MockMonochromatorController()
-            await asyncio.wait_for(self.mock_ctrl.start(),
-                                   timeout=SimulationConfiguration().connection_timeout)
+            await asyncio.wait_for(
+                self.mock_ctrl.start(),
+                timeout=SimulationConfiguration().connection_timeout,
+            )
         if self.want_connection:
             await self.model.connect()

@@ -12,8 +12,10 @@ __version__ = "{version}"
 setup(
     name="ts_atmonochromator",
     description="CSC ATMonochromator.",
-    use_scm_version={"write_to": "python/lsst/ts/monochromator/version.py",
-                     "write_to_template": scm_version_template},
+    use_scm_version={
+        "write_to": "python/lsst/ts/monochromator/version.py",
+        "write_to_template": scm_version_template,
+    },
     setup_requires=["setuptools_scm"],
     install_requires=install_requires,
     package_dir={"": "python"},
@@ -22,5 +24,5 @@ setup(
     scripts=["bin.src/atmonochromator_csc.py"],
     tests_require=tests_require,
     extras_require={"dev": dev_requires},
-    license="GPL"
+    license="GPL",
 )

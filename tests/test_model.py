@@ -40,8 +40,8 @@ port_generator = salobj.index_generator(imin=3200)
 
 
 class ModelTestCase(asynctest.TestCase):
-    """Test Model
-    """
+    """Test Model"""
+
     async def setUp(self):
         self.model = Model(logger)
 
@@ -86,7 +86,10 @@ class ModelTestCase(asynctest.TestCase):
         # Test out of range
         current_wave = float(self.ctrl.wavelength)
 
-        for value in (self.ctrl.wavelength_range[0] - 10., self.ctrl.wavelength_range[1] + 10.):
+        for value in (
+            self.ctrl.wavelength_range[0] - 10.0,
+            self.ctrl.wavelength_range[1] + 10.0,
+        ):
             with self.subTest(cmd=f"set_wavelength({value})"):
                 reply = await self.model.set_wavelength(value)
                 self.assertEqual(reply, ModelReply.OUT_OF_RANGE)
@@ -155,8 +158,10 @@ class ModelTestCase(asynctest.TestCase):
         # Test out of range
         current_ens = float(self.ctrl.entrance_slit_position)
 
-        for value in (self.ctrl.entrance_slit_range[0] - 10.,
-                      self.ctrl.entrance_slit_range[1] + 10.):
+        for value in (
+            self.ctrl.entrance_slit_range[0] - 10.0,
+            self.ctrl.entrance_slit_range[1] + 10.0,
+        ):
             with self.subTest(cmd=f"set_entrance_slit({value})"):
                 reply = await self.model.set_entrance_slit(value)
                 self.assertEqual(reply, ModelReply.OUT_OF_RANGE)
@@ -189,7 +194,10 @@ class ModelTestCase(asynctest.TestCase):
         # Test out of range
         current_ens = float(self.ctrl.exit_slit_position)
 
-        for value in (self.ctrl.exit_slit_range[0] - 10., self.ctrl.exit_slit_range[1] + 10.):
+        for value in (
+            self.ctrl.exit_slit_range[0] - 10.0,
+            self.ctrl.exit_slit_range[1] + 10.0,
+        ):
             with self.subTest(cmd=f"set_exit_slit({value})"):
                 reply = await self.model.set_exit_slit(value)
                 self.assertEqual(reply, ModelReply.OUT_OF_RANGE)

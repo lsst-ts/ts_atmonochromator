@@ -36,8 +36,8 @@ port_generator = salobj.index_generator(imin=3100)
 
 
 class MockTestCase(asynctest.TestCase):
-    """Test MockMonochromatorController
-    """
+    """Test MockMonochromatorController"""
+
     async def setUp(self):
         self.writer = None
 
@@ -45,7 +45,9 @@ class MockTestCase(asynctest.TestCase):
         self.ctrl.config.port = next(port_generator)
 
         await asyncio.wait_for(self.ctrl.start(), 5)
-        rw_coro = asyncio.open_connection(host=self.ctrl.config.host, port=self.ctrl.config.port)
+        rw_coro = asyncio.open_connection(
+            host=self.ctrl.config.host, port=self.ctrl.config.port
+        )
         self.reader, self.writer = await asyncio.wait_for(rw_coro, timeout=10)
 
     async def tearDown(self):
@@ -82,7 +84,9 @@ class MockTestCase(asynctest.TestCase):
 
         # Test minimum value
         with self.subTest(cmd=f"!WL {self.ctrl.wavelength_range[0]}"):
-            reply_lines = await self.send_cmd(f"!WL {self.ctrl.wavelength_range[0]}\r\n")
+            reply_lines = await self.send_cmd(
+                f"!WL {self.ctrl.wavelength_range[0]}\r\n"
+            )
             status = reply_lines.split()
             self.assertEqual(status[0], self.ctrl.ok)
 
@@ -93,7 +97,9 @@ class MockTestCase(asynctest.TestCase):
 
         # Test maximum value
         with self.subTest(cmd=f"!WL {self.ctrl.wavelength_range[1]}"):
-            reply_lines = await self.send_cmd(f"!WL {self.ctrl.wavelength_range[1]}\r\n")
+            reply_lines = await self.send_cmd(
+                f"!WL {self.ctrl.wavelength_range[1]}\r\n"
+            )
             status = reply_lines.split()
             self.assertEqual(status[0], self.ctrl.ok)
 
@@ -109,7 +115,9 @@ class MockTestCase(asynctest.TestCase):
         with self.subTest(cmd=f"!WL {self.ctrl.wavelength_range[0]-10.}"):
 
             # Test below minimum value
-            reply_lines = await self.send_cmd(f"!WL {self.ctrl.wavelength_range[0]-10.}\r\n")
+            reply_lines = await self.send_cmd(
+                f"!WL {self.ctrl.wavelength_range[0]-10.}\r\n"
+            )
             status = reply_lines.split()
             self.assertEqual(status[0], self.ctrl.our)
             self.assertEqual(current_wave, self.ctrl.wavelength)
@@ -117,7 +125,9 @@ class MockTestCase(asynctest.TestCase):
         with self.subTest(cmd=f"!WL {self.ctrl.wavelength_range[1]+10.}"):
 
             # Test above maximum value
-            reply_lines = await self.send_cmd(f"!WL {self.ctrl.wavelength_range[1]+10.}\r\n")
+            reply_lines = await self.send_cmd(
+                f"!WL {self.ctrl.wavelength_range[1]+10.}\r\n"
+            )
             status = reply_lines.split()
             self.assertEqual(status[0], self.ctrl.our)
             self.assertEqual(current_wave, self.ctrl.wavelength)
@@ -177,7 +187,10 @@ class MockTestCase(asynctest.TestCase):
         current_value = self.ctrl.entrance_slit_position
 
         # Test out of range values
-        for value in (self.ctrl.entrance_slit_range[0] - 10, self.ctrl.entrance_slit_range[1] + 10):
+        for value in (
+            self.ctrl.entrance_slit_range[0] - 10,
+            self.ctrl.entrance_slit_range[1] + 10,
+        ):
             with self.subTest(cmd=f"!ENS {value}"):
                 reply_lines = await self.send_cmd(f"!ENS {value}\r\n")
                 status = reply_lines.split()
@@ -216,7 +229,10 @@ class MockTestCase(asynctest.TestCase):
         current_value = self.ctrl.exit_slit_position
 
         # Test out of range values
-        for value in (self.ctrl.exit_slit_range[0] - 10, self.ctrl.exit_slit_range[1] + 10):
+        for value in (
+            self.ctrl.exit_slit_range[0] - 10,
+            self.ctrl.exit_slit_range[1] + 10,
+        ):
             with self.subTest(cmd=f"!EXS {value}"):
                 reply_lines = await self.send_cmd(f"!EXS {value}\r\n")
                 status = reply_lines.split()
@@ -241,8 +257,9 @@ class MockTestCase(asynctest.TestCase):
         max_w = self.ctrl.wavelength_range[1]
         min_w = self.ctrl.wavelength_range[0]
         wavelength = np.random.random() * (max_w - min_w) + min_w
-        grating = np.random.randint(self.ctrl.grating_options[0],
-                                    self.ctrl.grating_options[-1])
+        grating = np.random.randint(
+            self.ctrl.grating_options[0], self.ctrl.grating_options[-1]
+        )
 
         max_f = self.ctrl.entrance_slit_range[1]
         min_f = self.ctrl.entrance_slit_range[0]
@@ -253,10 +270,9 @@ class MockTestCase(asynctest.TestCase):
         min_e = self.ctrl.exit_slit_range[0]
         exit_slit = np.random.random() * (max_e - min_e) + min_e
 
-        reply_lines = await self.send_cmd(f"!SET {wavelength} "
-                                          f"{grating} "
-                                          f"{front_slit} "
-                                          f"{exit_slit}\r\n")
+        reply_lines = await self.send_cmd(
+            f"!SET {wavelength} " f"{grating} " f"{front_slit} " f"{exit_slit}\r\n"
+        )
         status = reply_lines.split()
         self.assertEqual(status[0], self.ctrl.ok)
         self.assertEqual(wavelength, self.ctrl.wavelength)
