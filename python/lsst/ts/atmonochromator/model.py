@@ -1,4 +1,3 @@
-
 import enum
 import time
 import asyncio
@@ -6,10 +5,7 @@ import asyncio
 from lsst.ts.idl.enums.ATMonochromator import Status as MonochromatorStatus
 
 
-__all__ = ['Model', 'ModelReply']
-
-_LOCAL_HOST = "127.0.0.1"
-_DEFAULT_PORT = 50000
+__all__ = ["Model", "ModelReply"]
 
 
 class ModelReply(enum.Enum):
@@ -25,15 +21,14 @@ class Model:
     implements all the available commands from the hardware and ways to select
     a configuration, connect to the Monochromator and so on.
     """
+
     def __init__(self, log):
 
         self.log = log
 
-        self.host = _LOCAL_HOST
-        self.port = _DEFAULT_PORT
-        self.connection_timeout = 10.
-        self.read_timeout = 10.
-        self.move_timeout = 60.
+        self.connection_timeout = 10.0
+        self.read_timeout = 10.0
+        self.move_timeout = 60.0
 
         self.wait_ready_sleeptime = 0.5
 
@@ -44,21 +39,20 @@ class Model:
         self.cmd_lock = asyncio.Lock()
         self.controller_ready = False
 
-    async def connect(self):
-        """Connect to the spectrograph controller's TCP/IP port.
-        """
-        self.log.debug(f"connecting to: {self.host}:{self.port}")
+    async def connect(self, host, port):
+        """Connect to the spectrograph controller's TCP/IP port."""
+        self.log.debug(f"connecting to: {host}:{port}")
         if self.connected:
             raise RuntimeError("Already connected")
-        self.connect_task = asyncio.open_connection(host=self.host, port=self.port)
-        self.reader, self.writer = await asyncio.wait_for(self.connect_task,
-                                                          timeout=self.connection_timeout)
+        self.connect_task = asyncio.open_connection(host=host, port=port)
+        self.reader, self.writer = await asyncio.wait_for(
+            self.connect_task, timeout=self.connection_timeout
+        )
 
-        self.log.debug(f"connected")
+        self.log.debug("connected")
 
     async def disconnect(self):
-        """Disconnect from the spectrograph controller's TCP/IP port.
-        """
+        """Disconnect from the spectrograph controller's TCP/IP port."""
         self.log.debug("disconnect")
         writer = self.writer
         self.reader = None
@@ -259,8 +253,12 @@ class Model:
         reply : ModelReply
 
         """
-        self.log.debug(f"Setting all: {wavelength} {grating} {entrance_slit} {exit_slit}")
-        cmd_reply = await self.send_cmd(f"!SET {wavelength} {grating} {entrance_slit} {exit_slit}")
+        self.log.debug(
+            f"Setting all: {wavelength} {grating} {entrance_slit} {exit_slit}"
+        )
+        cmd_reply = await self.send_cmd(
+            f"!SET {wavelength} {grating} {entrance_slit} {exit_slit}"
+        )
         return ModelReply(cmd_reply)
 
     async def wait_ready(self, cmd):
@@ -282,7 +280,9 @@ class Model:
             elif time.time() > start_time + self.move_timeout:
                 raise TimeoutError(f"Setting up {cmd} timed out.")
             elif status == MonochromatorStatus.FAULT:
-                raise RuntimeError(f"Controller in FAULT state while checking for {cmd}.")
+                raise RuntimeError(
+                    f"Controller in FAULT state while checking for {cmd}."
+                )
             elif status == MonochromatorStatus.OFFLINE:
                 raise RuntimeError(f"Controller OFFLINE while checking for {cmd}.")
 
