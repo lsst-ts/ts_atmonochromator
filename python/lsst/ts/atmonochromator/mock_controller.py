@@ -1,53 +1,59 @@
-__all__ = ["MockMonochromatorController"]
+__all__ = ["MockController", "SimulationConfiguration"]
 
 import asyncio
 import logging
 
-from .model import MonochromatorStatus
+from lsst.ts.idl.enums.ATMonochromator import Status as MonochromatorStatus
 
 
-class MockMonochromatorController:
-    """Mock Monochromator Controller that talks over TCP/IP.
+class SimulationConfiguration:
+    def __init__(self):
+        self.host = "127.0.0.1"
+        self.port = 0
+        self.connection_timeout = 10.0
+        self.read_timeout = 10.0
+        self.write_timeout = 10.0
+        self.wavelength_gr1 = 320.0
+        self.wavelength_gr1_gr2 = 800.0
+        self.wavelength_gr2 = 1130.0
+        self.min_slit_width = 0.0
+        self.max_slit_width = 7.0
+        self.min_wavelength = 320.0
+        self.max_wavelength = 1130.0
+        self.period = 1.0
+        self.timeout = 5.0
+
+
+class MockController:
+    """Mock Monochromator low-level controller that talks over TCP/IP.
 
     The Monochromator TCP Protocol is specified here:
     https://confluence.lsstcorp.org/display/LTS/Monochromator+TCP+Protocol
-
-    Parameters
-    ----------
-    port : int
-        TCP/IP port
-
     """
 
-    def __init__(self, port):
-        self.port = port
+    def __init__(self):
+        self.config = SimulationConfiguration()
 
-        self.log = logging.getLogger("MockMonochromatorController")
+        self.log = logging.getLogger("MockController")
 
-        self._server = None
+        self.server = None
 
-        self.wait_time = .1
+        self.wait_time = 0.1
 
+        # Status of the monochromator controller.
         self.status = MonochromatorStatus.OFFLINE
-        """Status of the monochromator controller.
-        Must be one of:
-            0 for SettingUp, 1 for Ready, 2 for Offline, 3 for Fault.
-        """
 
         self.controller_busy = False
 
-        self.wavelength_range = (320., 1130.)  # wavelength range in nm
-        self.wavelength = 320.
-        self.wavelength_offset = 0.
+        self.wavelength = 320.0
+        self.wavelength_offset = 0.0
 
         self.grating_options = (0, 1, 2)
         self.grating = 0
 
-        self.entrance_slit_range = (0., 7.)  # entrance slit range in mm
-        self.entrance_slit_position = 0.
+        self.entrance_slit_position = 0.0
 
-        self.exit_slit_range = (0., 7.)  # entrance slit range in mm
-        self.exit_slit_position = 0.
+        self.exit_slit_position = 0.0
 
         # responses to commands:
         self.ok = "#OK"  # Accepted command
@@ -56,38 +62,62 @@ class MockMonochromatorController:
         self.busy = "#BUSY"  # Device busy executing another command
         self.rejected = "#RJCT"  # Rejected
 
-        self._cmds = {"!WL": self.set_wl,
-                      "!GR": self.set_gr,
-                      "!ENS": self.set_ens,
-                      "!EXS": self.set_exs,
-                      "!CLW": self.set_clw,
-                      "!RST": self.set_rst,
-                      "!SET": self.set_set,
-                      "?WL": self.get_wl,
-                      "?GR": self.get_gr,
-                      "?ENS": self.get_ens,
-                      "?EXS": self.get_exs,
-                      "?SWST": self.get_swst,
-                      }
+        self._cmds = {
+            "!WL": self.set_wl,
+            "!GR": self.set_gr,
+            "!ENS": self.set_ens,
+            "!EXS": self.set_exs,
+            "!CLW": self.set_clw,
+            "!RST": self.set_rst,
+            "!SET": self.set_set,
+            "?WL": self.get_wl,
+            "?GR": self.get_gr,
+            "?ENS": self.get_ens,
+            "?EXS": self.get_exs,
+            "?SWST": self.get_swst,
+        }
+
+    @property
+    def exit_slit_range(self):
+        return self.config.min_slit_width, self.config.max_slit_width
+
+    @property
+    def entrance_slit_range(self):
+        return self.config.min_slit_width, self.config.max_slit_width
+
+    @property
+    def wavelength_range(self):
+        return self.config.min_wavelength, self.config.min_wavelength
 
     async def start(self):
         """Start the TCP/IP server, set start_task Done
         and start the command loop.
         """
-        self._server = await asyncio.start_server(self.cmd_loop,
-                                                  host="127.0.0.1",
-                                                  port=self.port)
+        self.status = MonochromatorStatus.SETTING_UP
+        self.server = await asyncio.start_server(
+            self.cmd_loop, host=self.config.host, port=0
+        )
+        num_sockets = len(self.server.sockets)
+        if num_sockets != 1:
+            raise RuntimeError(
+                "Listening on more than one socket; cannot determine port"
+            )
+        self.port = self.server.sockets[0].getsockname()[1]
+        self.log.info(
+            f"MockController server running: host={self.config.host}; port={self.port}"
+        )
+        self.status = MonochromatorStatus.READY
 
     async def stop(self, timeout=5):
-        """Stop the TCP/IP server.
-        """
-        if self._server is None:
+        """Stop the TCP/IP server."""
+        if self.server is None:
             return
 
-        server = self._server
-        self._server = None
+        server = self.server
+        self.server = None
         server.close()
         await asyncio.wait_for(server.wait_closed(), timeout=timeout)
+        MonochromatorStatus.OFFLINE
 
     async def cmd_loop(self, reader, writer):
         self.log.info("cmd_loop begins")
@@ -383,14 +413,14 @@ class MockMonochromatorController:
             return self.rejected
 
         self.log.debug("Starting rst")
-        self.status = MonochromatorStatus.SETTINGUP
+        self.status = MonochromatorStatus.SETTING_UP
         self.busy = True
 
         await asyncio.sleep(self.wait_time)
 
         # reset values
         self.log.debug("Resetting wavelength")
-        self.wavelength_offset = 0.
+        self.wavelength_offset = 0.0
         self.wavelength = self.wavelength_range[0]
         await asyncio.sleep(self.wait_time)
         self.log.debug("Resetting entrance slit")
@@ -410,31 +440,32 @@ class MockMonochromatorController:
         return self.ok
 
     async def set_set(self, args):
-        """Setup all parameters in the following order:
-        "Wavelength Grating FrontEntranceSlitWidth FrontExitSlitWidth"
+        """Set all parameters.
 
         Parameters
         ----------
         args : list(str)
-            A list with the values for each parameter to set. A total of four
-            items is expected;
-                Wavelength, in nm
-                Grating
-                FrontEntranceSlitWidth, in mm
-                FrontExitSlitWidth, im mm
+            A list with the following values:
 
+            * wavelength, in nm
+            * grating name
+            * front entrance slit width, in mm
+            * front exit slit width, im mm
 
         Returns
         -------
         result : str
-            Response to the set command:
-                #OK - Accepted command
-                #OUR - Out of range
-                ?? - Invalid command
-                #BUSY - Device busy executing another command
-                #RJCT - Rejected
+            Response to the set command; one of:
 
+            * #OK - Accepted command
+            * #OUR - Out of range
+            * ?? - Invalid command
+            * #BUSY - Device busy executing another command
+            * #RJCT - Rejected
         """
+        if len(args) != 4:
+            return self.rejected
+
         try:
             retval = await self.set_wl(args)
             if retval != self.ok:

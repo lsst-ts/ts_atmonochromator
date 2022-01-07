@@ -18,39 +18,127 @@
 #
 # You should have received a copy of the GNU General Public License
 
-import sys
+import os
+import glob
+import pathlib
 import unittest
-import asyncio
-import numpy as np
-import logging
 
 from lsst.ts import salobj
 
-from lsst.ts.monochromator import monochromator_csc as csc
-from lsst.ts.monochromator import MockMonochromatorController
+from lsst.ts import atmonochromator
 
-import SALPY_ATMonochromator
+from lsst.ts.idl.enums import ATMonochromator
 
-np.random.seed(12)
+TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1].joinpath("tests", "data", "config")
 
-index_gen = salobj.index_generator()
-
-logger = logging.getLogger()
-logger.level = logging.DEBUG
+STD_TIMEOUT = 60
+LONG_TIMEOUT = 120.0
 
 
-class Harness:
-    def __init__(self):
-        salobj.test_utils.set_random_lsst_dds_domain()
-        self.csc = csc.CSC()
-        self.remote = salobj.Remote(SALPY_ATMonochromator)
-        self.mock_ctrl = MockMonochromatorController(port=self.csc.model.port)
+class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        salobj.set_random_lsst_dds_partition_prefix()
 
+    def basic_make_csc(
+        self, initial_state, config_dir, simulation_mode, settings_to_apply=""
+    ):
+        return atmonochromator.MonochromatorCsc(
+            initial_state=initial_state,
+            config_dir=config_dir,
+            settings_to_apply=settings_to_apply,
+            simulation_mode=simulation_mode,
+        )
 
-class TestATMonochromatorCSC(unittest.TestCase):
+    async def test_basics(self):
+        async with self.make_csc(initial_state=salobj.State.ENABLED, simulation_mode=1):
 
-    def test_standard_state_transitions(self):
-        """Test standard CSC state transitions.
+            # Check that settingVersions was published
+            await self.remote.evt_settingVersions.next(flush=False, timeout=STD_TIMEOUT)
+
+            # check settings applied events
+            sim_config = atmonochromator.SimulationConfiguration()
+            await self.assert_next_sample(
+                topic=self.remote.evt_settingsAppliedMonoCommunication,
+                ip=sim_config.host,
+                portRange=sim_config.port,
+                connectionTimeout=sim_config.connection_timeout,
+                readTimeout=sim_config.read_timeout,
+                writeTimeout=sim_config.write_timeout,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_settingsAppliedMonochromatorRanges,
+                wavelengthGR1=sim_config.wavelength_gr1,
+                wavelengthGR1_GR2=sim_config.wavelength_gr1_gr2,
+                wavelengthGR2=sim_config.wavelength_gr2,
+                minSlitWidth=sim_config.min_slit_width,
+                maxSlitWidth=sim_config.max_slit_width,
+                minWavelength=sim_config.min_wavelength,
+                maxWavelength=sim_config.max_wavelength,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_settingsAppliedMonoHeartbeat,
+                period=sim_config.period,
+                timeout=sim_config.timeout,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_status, status=ATMonochromator.Status.READY
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_wavelength,
+                wavelength=self.csc.mock_ctrl.wavelength,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_selectedGrating,
+                gratingType=self.csc.mock_ctrl.grating,
+            )
+            entrance_slit = await self.assert_next_sample(
+                topic=self.remote.evt_entrySlitWidth,
+                width=self.csc.mock_ctrl.entrance_slit_position,
+            )
+            await self.assert_next_sample(
+                topic=self.remote.evt_slitWidth,
+                slit=ATMonochromator.Slit.ENTRY,
+                slitPosition=entrance_slit.width,
+            )
+
+            exit_slit = await self.assert_next_sample(
+                topic=self.remote.evt_exitSlitWidth,
+                width=self.csc.mock_ctrl.exit_slit_position,
+            )
+
+            await self.assert_next_sample(
+                topic=self.remote.evt_slitWidth,
+                slit=ATMonochromator.Slit.EXIT,
+                slitPosition=exit_slit.width,
+            )
+
+    async def test_bin_script(self):
+        await self.check_bin_script(
+            name="ATMonochromator", index=None, exe_name="atmonochromator_csc.py"
+        )
+
+    async def test_config(self):
+        """Test MonochromatorCsc configuration validator."""
+        async with self.make_csc(simulation_mode=1, config_dir=TEST_CONFIG_DIR):
+            await self.assert_next_summary_state(salobj.State.STANDBY)
+
+            invalid_files = glob.glob(os.path.join(TEST_CONFIG_DIR, "invalid_*.yaml"))
+            bad_config_names = [os.path.basename(name) for name in invalid_files]
+            bad_config_names.append("no_such_file.yaml")
+            for bad_config_name in bad_config_names:
+                with self.subTest(bad_config_name=bad_config_name):
+                    with salobj.assertRaisesAckError():
+                        await self.remote.cmd_start.set_start(
+                            settingsToApply=bad_config_name, timeout=STD_TIMEOUT
+                        )
+
+            await self.remote.cmd_start.set_start(
+                settingsToApply="all_fields", timeout=STD_TIMEOUT
+            )
+            await self.assert_next_summary_state(salobj.State.DISABLED)
+
+    async def test_standard_state_transitions(self):
+        """Test standard MonochromatorCsc state transitions.
 
         The initial state is STANDBY.
         The standard commands and associated state transitions are:
@@ -64,87 +152,14 @@ class TestATMonochromatorCSC(unittest.TestCase):
         * exitControl: STANDBY, FAULT to OFFLINE (quit)
         """
 
-        async def doit():
-
-            commands = ("start", "enable", "disable", "exitControl", "standby")
-            harness = Harness()
-            await asyncio.wait_for(harness.mock_ctrl.start(), timeout=2)
-
-            # Check initial state
-            current_state = await harness.remote.evt_summaryState.next(flush=False, timeout=1.)
-
-            self.assertEqual(harness.csc.summary_state, salobj.State.STANDBY)
-            self.assertEqual(current_state.summaryState, salobj.State.STANDBY)
-
-            # Check that settingVersions was published and matches expected values
-            setting_versions = await harness.remote.evt_settingVersions.next(flush=False, timeout=1.)
-            self.assertEqual(setting_versions.recommendedSettingsVersion,
-                             harness.csc.model.config['settingVersions']['recommendedSettingsVersion'])
-            self.assertEqual(setting_versions.recommendedSettingsLabels,
-                             harness.csc.model.settings_labels)
-            self.assertTrue(setting_versions.recommendedSettingsVersion in
-                            setting_versions.recommendedSettingsLabels.split(','))
-            self.assertTrue('simulation' in
-                            setting_versions.recommendedSettingsLabels.split(','))
-
-            for bad_command in commands:
-                if bad_command in ("start", "exitControl"):
-                    continue  # valid command in STANDBY state
-                with self.subTest(bad_command=bad_command):
-                    cmd_attr = getattr(harness.remote, f"cmd_{bad_command}")
-                    with self.assertRaises(salobj.AckError):
-                        await cmd_attr.start(cmd_attr.DataType(), timeout=1.)
-
-            # send start; new state is DISABLED
-            cmd_attr = getattr(harness.remote, f"cmd_start")
-            state_coro = harness.remote.evt_summaryState.next(flush=True, timeout=1.)
-            cmd_attr.set(settingsToApply='simulation')  # user simulation setting.
-            await cmd_attr.start(timeout=120)  # this one can take longer to execute
-            state = await state_coro
-            self.assertEqual(harness.csc.summary_state, salobj.State.DISABLED)
-            self.assertEqual(state.summaryState, salobj.State.DISABLED)
-
-            for bad_command in commands:
-                if bad_command in ("enable", "standby"):
-                    continue  # valid command in DISABLED state
-                with self.subTest(bad_command=bad_command):
-                    cmd_attr = getattr(harness.remote, f"cmd_{bad_command}")
-                    with self.assertRaises(salobj.AckError):
-                        await cmd_attr.start(cmd_attr.DataType(), timeout=1.)
-
-            # send enable; new state is ENABLED
-            cmd_attr = getattr(harness.remote, f"cmd_enable")
-            state_coro = harness.remote.evt_summaryState.next(flush=True, timeout=1.)
-            try:
-                # enable may take some time to complete
-                await cmd_attr.start(cmd_attr.DataType(), timeout=120.)
-            finally:
-                state = await state_coro
-            self.assertEqual(harness.csc.summary_state, salobj.State.ENABLED)
-            self.assertEqual(state.summaryState, salobj.State.ENABLED)
-
-            for bad_command in commands:
-                if bad_command in ("disable",):
-                    continue  # valid command in ENABLE state
-                logger.debug(f"Testing {bad_command}")
-                with self.subTest(bad_command=bad_command):
-                    cmd_attr = getattr(harness.remote, f"cmd_{bad_command}")
-                    with self.assertRaises(salobj.AckError):
-                        await cmd_attr.start(cmd_attr.DataType(), timeout=1.)
-
-            # send disable; new state is DISABLED
-            cmd_attr = getattr(harness.remote, f"cmd_disable")
-            # this CMD may take some time to complete
-            await cmd_attr.start(cmd_attr.DataType(), timeout=30.)
-            self.assertEqual(harness.csc.summary_state, salobj.State.DISABLED)
-
-            await harness.mock_ctrl.stop()
-
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
-        asyncio.get_event_loop().run_until_complete(doit())
-
-
-if __name__ == '__main__':
-    unittest.main()
+        async with self.make_csc(simulation_mode=1):
+            await self.check_standard_state_transitions(
+                enabled_commands=(
+                    "changeWavelength",
+                    "calibrateWavelength",
+                    "power",
+                    "selectGrating",
+                    "changeSlitWidth",
+                    "updateMonochromatorSetup",
+                )
+            )

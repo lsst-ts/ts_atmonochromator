@@ -20,244 +20,208 @@
 
 import sys
 import asyncio
-import unittest
+import itertools
 import logging
+import unittest
+
 import numpy as np
 
-from lsst.ts import salobj
-from lsst.ts.monochromator import Model, ModelReply, MonochromatorStatus
-from lsst.ts.monochromator import MockMonochromatorController
+from lsst.ts import atmonochromator
+from lsst.ts.idl.enums.ATMonochromator import Status
 
 logger = logging.getLogger()
 logger.level = logging.DEBUG
+logger.addHandler(logging.StreamHandler(sys.stdout))
 
-port_generator = salobj.index_generator(imin=3200)
+# Standard timeout (seconds)
+STD_TIMEOUT = 10
 
 
-class ModelTestCase(unittest.TestCase):
-    """Test Model
-    """
-    def setUp(self):
-        self.model = Model(logger)
-        self.port = next(port_generator)
-        self.model.port = self.port
-        self.ctrl = MockMonochromatorController(port=self.model.port)
+class ModelTestCase(unittest.IsolatedAsyncioTestCase):
+    """Test Model"""
+
+    async def asyncSetUp(self):
+        self.model = atmonochromator.Model(logger)
+
+        self.ctrl = atmonochromator.MockController()
+
+        self.host = self.ctrl.config.host
+
         self.reader = None
         self.writer = None
 
-        async def doit():
-            await asyncio.wait_for(self.ctrl.start(), 5)
-            await self.model.connect()
+        await asyncio.wait_for(self.ctrl.start(), timeout=STD_TIMEOUT)
+        await self.model.connect(host=self.host, port=self.ctrl.port)
 
-        asyncio.get_event_loop().run_until_complete(doit())
+    async def asyncTearDown(self):
+        if self.ctrl is not None:
+            await asyncio.wait_for(self.ctrl.stop(), timeout=STD_TIMEOUT)
+            await self.model.disconnect()
+        if self.writer is not None:
+            self.writer.close()
 
-    def tearDown(self):
-        async def doit():
-            if self.ctrl:
-                await asyncio.wait_for(self.ctrl.stop(), 5)
-                await self.model.disconnect()
-            if self.writer:
-                self.writer.close()
+    async def test_wavelength(self):
+        # setup controller
+        reply = await self.model.reset_controller()
+        assert reply == atmonochromator.ModelReply.OK
 
-        asyncio.get_event_loop().run_until_complete(doit())
+        reply = await self.model.get_wavelength()
+        assert reply == self.ctrl.wavelength
 
-    def test_wavelength(self):
-        async def doit():
+        # Test setting range of values from minimum to maximum...
+        for value in np.linspace(*self.ctrl.wavelength_range):
+            with self.subTest(cmd=f"set_wavelength({value})"):
+                reply = await self.model.set_wavelength(value)
+                assert reply == atmonochromator.ModelReply.OK
+                assert value == self.ctrl.wavelength
 
-            # setup controller
-            with self.subTest(cmd="setup"):
-                reply = await self.model.reset_controller()
-                self.assertEqual(reply, ModelReply.OK)
+        # Test out of range
+        current_wave = float(self.ctrl.wavelength)
 
-            with self.subTest(cmd="get_wavelength"):
-                reply = await self.model.get_wavelength()
-                self.assertEqual(reply, self.ctrl.wavelength)
+        for value in (
+            self.ctrl.wavelength_range[0] - 10.0,
+            self.ctrl.wavelength_range[1] + 10.0,
+        ):
+            with self.subTest(cmd=f"set_wavelength({value})"):
+                reply = await self.model.set_wavelength(value)
+                assert reply == atmonochromator.ModelReply.OUT_OF_RANGE
+                assert current_wave == self.ctrl.wavelength
 
-            # Test setting range of values from minimum to maximum...
-            for value in np.linspace(*self.ctrl.wavelength_range):
-                with self.subTest(cmd=f"set_wavelength({value})"):
-                    reply = await self.model.set_wavelength(value)
-                    self.assertEqual(reply, ModelReply.OK)
-                    self.assertEqual(value, self.ctrl.wavelength)
+        # Test invalid
+        for value in ("FOO", "bAr"):
+            with self.subTest(cmd=f"set_wavelength({value})"):
+                reply = await self.model.set_wavelength(value)
+                assert reply == atmonochromator.ModelReply.REJECTED
+                assert current_wave == self.ctrl.wavelength
 
-            # Test out of range
-            current_wave = float(self.ctrl.wavelength)
+    async def test_grating(self):
+        # setup controller
+        reply = await self.model.reset_controller()
+        assert reply == atmonochromator.ModelReply.OK
 
-            for value in (self.ctrl.wavelength_range[0]-10., self.ctrl.wavelength_range[1]+10.):
-                with self.subTest(cmd=f"set_wavelength({value})"):
-                    reply = await self.model.set_wavelength(value)
-                    self.assertEqual(reply, ModelReply.OUT_OF_RANGE)
-                    self.assertEqual(current_wave, self.ctrl.wavelength)
+        reply = await self.model.get_grating()
+        assert reply == self.ctrl.grating
 
-            # Test invalid
-            for value in ("FOO", "bAr"):
-                with self.subTest(cmd=f"set_wavelength({value})"):
-                    reply = await self.model.set_wavelength(value)
-                    self.assertEqual(reply, ModelReply.REJECTED)
-                    self.assertEqual(current_wave, self.ctrl.wavelength)
+        # Test setting range of values from minimum to maximum...
+        for value in self.ctrl.grating_options:
+            with self.subTest(cmd=f"set_grating({value})"):
+                reply = await self.model.set_grating(value)
+                assert reply == atmonochromator.ModelReply.OK
+                assert value == self.ctrl.grating
 
-        asyncio.get_event_loop().run_until_complete(doit())
+        # Test out of range
+        current_grating = float(self.ctrl.grating)
 
-    def test_grating(self):
-        async def doit():
-
-            # setup controller
-            with self.subTest(cmd="setup"):
-                reply = await self.model.reset_controller()
-                self.assertEqual(reply, ModelReply.OK)
-
-            with self.subTest(cmd="get_grating"):
-                reply = await self.model.get_grating()
-                self.assertEqual(reply, self.ctrl.grating)
-
-            # Test setting range of values from minimum to maximum...
-            for value in self.ctrl.grating_options:
+        min_grating = np.min(self.ctrl.grating_options)
+        max_grating = np.min(self.ctrl.grating_options)
+        for value in np.random.randint(min_grating - 10, max_grating + 10, 10):
+            if value not in self.ctrl.grating_options:
                 with self.subTest(cmd=f"set_grating({value})"):
                     reply = await self.model.set_grating(value)
-                    self.assertEqual(reply, ModelReply.OK)
-                    self.assertEqual(value, self.ctrl.grating)
+                    assert reply == atmonochromator.ModelReply.OUT_OF_RANGE
+                    assert current_grating == self.ctrl.grating
 
-            # Test out of range
-            current_grating = float(self.ctrl.grating)
+        # Test invalid
+        for value in ("FoO", "bAr"):
+            with self.subTest(cmd=f"set_grating({value})"):
+                reply = await self.model.set_grating(value)
+                assert reply == atmonochromator.ModelReply.REJECTED
+                assert current_grating == self.ctrl.grating
 
-            min_grating = np.min(self.ctrl.grating_options)
-            max_grating = np.min(self.ctrl.grating_options)
-            for value in np.random.randint(min_grating-10, max_grating+10, 10):
-                if value not in self.ctrl.grating_options:
-                    with self.subTest(cmd=f"set_grating({value})"):
-                        reply = await self.model.set_grating(value)
-                        self.assertEqual(reply, ModelReply.OUT_OF_RANGE)
-                        self.assertEqual(current_grating, self.ctrl.grating)
+    async def test_ens(self):
+        # setup controller
+        reply = await self.model.reset_controller()
+        assert reply == atmonochromator.ModelReply.OK
 
-            # Test invalid
-            for value in ("FoO", "bAr"):
-                with self.subTest(cmd=f"set_grating({value})"):
-                    reply = await self.model.set_grating(value)
-                    self.assertEqual(reply, ModelReply.REJECTED)
-                    self.assertEqual(current_grating, self.ctrl.grating)
+        reply = await self.model.get_entrance_slit()
+        assert reply == self.ctrl.entrance_slit_position
 
-        asyncio.get_event_loop().run_until_complete(doit())
+        # Test setting range of values from minimum to maximum...
+        for value in np.linspace(*self.ctrl.entrance_slit_range):
+            with self.subTest(cmd=f"set_entrance_slit({value})"):
+                reply = await self.model.set_entrance_slit(value)
+                assert reply == atmonochromator.ModelReply.OK
+                assert value == self.ctrl.entrance_slit_position
 
-    def test_ens(self):
-        async def doit():
+        # Test out of range
+        current_ens = float(self.ctrl.entrance_slit_position)
 
-            # setup controller
-            with self.subTest(cmd="setup"):
-                reply = await self.model.reset_controller()
-                self.assertEqual(reply, ModelReply.OK)
+        for value in (
+            self.ctrl.entrance_slit_range[0] - 10.0,
+            self.ctrl.entrance_slit_range[1] + 10.0,
+        ):
+            with self.subTest(cmd=f"set_entrance_slit({value})"):
+                reply = await self.model.set_entrance_slit(value)
+                assert reply == atmonochromator.ModelReply.OUT_OF_RANGE
+                assert current_ens == self.ctrl.entrance_slit_position
 
-            with self.subTest(cmd="get_entrance_slit"):
-                reply = await self.model.get_entrance_slit()
-                self.assertEqual(reply, self.ctrl.entrance_slit_position)
+        # Test invalid
+        for value in ("FOO", "bAr"):
+            with self.subTest(cmd=f"set_entrance_slit({value})"):
+                reply = await self.model.set_entrance_slit(value)
+                assert reply == atmonochromator.ModelReply.REJECTED
+                assert current_ens == self.ctrl.entrance_slit_position
 
-            # Test setting range of values from minimum to maximum...
-            for value in np.linspace(*self.ctrl.entrance_slit_range):
-                with self.subTest(cmd=f"set_entrance_slit({value})"):
-                    reply = await self.model.set_entrance_slit(value)
-                    self.assertEqual(reply, ModelReply.OK)
-                    self.assertEqual(value, self.ctrl.entrance_slit_position)
+    async def test_exs(self):
+        # setup controller
+        reply = await self.model.reset_controller()
+        assert reply == atmonochromator.ModelReply.OK
 
-            # Test out of range
-            current_ens = float(self.ctrl.entrance_slit_position)
+        reply = await self.model.get_exit_slit()
+        assert reply == self.ctrl.exit_slit_position
 
-            for value in (self.ctrl.entrance_slit_range[0] - 10., self.ctrl.entrance_slit_range[1] + 10.):
-                with self.subTest(cmd=f"set_entrance_slit({value})"):
-                    reply = await self.model.set_entrance_slit(value)
-                    self.assertEqual(reply, ModelReply.OUT_OF_RANGE)
-                    self.assertEqual(current_ens, self.ctrl.entrance_slit_position)
+        # Test setting range of values from minimum to maximum...
+        for value in np.linspace(*self.ctrl.exit_slit_range):
+            with self.subTest(cmd=f"set_exit_slit({value})"):
+                reply = await self.model.set_exit_slit(value)
+                assert reply == atmonochromator.ModelReply.OK
+                assert value == self.ctrl.exit_slit_position
 
-            # Test invalid
-            for value in ("FOO", "bAr"):
-                with self.subTest(cmd=f"set_entrance_slit({value})"):
-                    reply = await self.model.set_entrance_slit(value)
-                    self.assertEqual(reply, ModelReply.REJECTED)
-                    self.assertEqual(current_ens, self.ctrl.entrance_slit_position)
+        # Test out of range
+        current_ens = float(self.ctrl.exit_slit_position)
 
-        asyncio.get_event_loop().run_until_complete(doit())
+        for value in (
+            self.ctrl.exit_slit_range[0] - 10.0,
+            self.ctrl.exit_slit_range[1] + 10.0,
+        ):
+            with self.subTest(cmd=f"set_exit_slit({value})"):
+                reply = await self.model.set_exit_slit(value)
+                assert reply == atmonochromator.ModelReply.OUT_OF_RANGE
+                assert current_ens == self.ctrl.exit_slit_position
 
-    def test_exs(self):
+        # Test invalid
+        for value in ("FOO", "bAr"):
+            with self.subTest(cmd=f"set_exit_slit({value})"):
+                reply = await self.model.set_exit_slit(value)
+                assert reply == atmonochromator.ModelReply.REJECTED
+                assert current_ens == self.ctrl.exit_slit_position
 
-        async def doit():
+    async def test_set(self):
 
-            # setup controller
-            with self.subTest(cmd="setup"):
-                reply = await self.model.reset_controller()
-                self.assertEqual(reply, ModelReply.OK)
+        # setup controller
+        reply = await self.model.reset_controller()
+        assert reply == atmonochromator.ModelReply.OK
 
-            with self.subTest(cmd="get_exit_slit"):
-                reply = await self.model.get_exit_slit()
-                self.assertEqual(reply, self.ctrl.exit_slit_position)
+        wave_range = np.linspace(*self.ctrl.wavelength_range, 3)
+        grt_range = self.ctrl.grating_options
+        es_range = np.linspace(*self.ctrl.entrance_slit_range, 3)
+        ex_range = np.linspace(*self.ctrl.exit_slit_range, 3)
 
-            # Test setting range of values from minimum to maximum...
-            for value in np.linspace(*self.ctrl.exit_slit_range):
-                with self.subTest(cmd=f"set_exit_slit({value})"):
-                    reply = await self.model.set_exit_slit(value)
-                    self.assertEqual(reply, ModelReply.OK)
-                    self.assertEqual(value, self.ctrl.exit_slit_position)
+        for wave, gtr, es, ex in itertools.product(
+            wave_range, grt_range, es_range, ex_range
+        ):
+            with self.subTest(cmd=f"set({wave},{gtr},{es},{ex})"):
+                reply = await self.model.set_all(wave, gtr, es, ex)
+                assert reply == atmonochromator.ModelReply.OK
+                assert wave == self.ctrl.wavelength
+                assert gtr == self.ctrl.grating
+                assert es == self.ctrl.entrance_slit_position
+                assert ex == self.ctrl.exit_slit_position
 
-            # Test out of range
-            current_ens = float(self.ctrl.exit_slit_position)
+    async def test_status(self):
 
-            for value in (self.ctrl.exit_slit_range[0] - 10., self.ctrl.exit_slit_range[1] + 10.):
-                with self.subTest(cmd=f"set_exit_slit({value})"):
-                    reply = await self.model.set_exit_slit(value)
-                    self.assertEqual(reply, ModelReply.OUT_OF_RANGE)
-                    self.assertEqual(current_ens, self.ctrl.exit_slit_position)
+        reply = await self.model.reset_controller()
+        assert reply == atmonochromator.ModelReply.OK
 
-            # Test invalid
-            for value in ("FOO", "bAr"):
-                with self.subTest(cmd=f"set_exit_slit({value})"):
-                    reply = await self.model.set_exit_slit(value)
-                    self.assertEqual(reply, ModelReply.REJECTED)
-                    self.assertEqual(current_ens, self.ctrl.exit_slit_position)
-
-        asyncio.get_event_loop().run_until_complete(doit())
-
-    def test_set(self):
-
-        async def doit():
-
-            # setup controller
-            with self.subTest(cmd="setup"):
-                reply = await self.model.reset_controller()
-                self.assertEqual(reply, ModelReply.OK)
-
-            wave_range = np.linspace(*self.ctrl.wavelength_range, 3)
-            grt_range = self.ctrl.grating_options
-            es_range = np.linspace(*self.ctrl.entrance_slit_range, 3)
-            ex_range = np.linspace(*self.ctrl.exit_slit_range, 3)
-
-            for wave in wave_range:
-                for gtr in grt_range:
-                    for es in es_range:
-                        for ex in ex_range:
-                            with self.subTest(cmd=f"set({wave},{gtr},{es},{ex})"):
-                                reply = await self.model.set_all(wave, gtr, es, ex)
-                                self.assertEqual(reply, ModelReply.OK)
-                                self.assertEqual(wave, self.ctrl.wavelength)
-                                self.assertEqual(gtr, self.ctrl.grating)
-                                self.assertEqual(es, self.ctrl.entrance_slit_position)
-                                self.assertEqual(ex, self.ctrl.exit_slit_position)
-
-        asyncio.get_event_loop().run_until_complete(doit())
-
-    def test_status(self):
-
-        async def doit():
-            with self.subTest(cmd="setup"):
-                reply = await self.model.reset_controller()
-                self.assertEqual(reply, ModelReply.OK)
-
-            with self.subTest(cmd="get_status"):
-                reply = await self.model.get_status()
-                self.assertEqual(reply, MonochromatorStatus.READY)
-
-        asyncio.get_event_loop().run_until_complete(doit())
-
-
-if __name__ == "__main__":
-
-    stream_handler = logging.StreamHandler(sys.stdout)
-    logger.addHandler(stream_handler)
-
-    unittest.main()
+        reply = await self.model.get_status()
+        assert reply == Status.READY

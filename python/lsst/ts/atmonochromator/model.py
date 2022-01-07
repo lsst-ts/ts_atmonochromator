@@ -1,16 +1,11 @@
-
-import os
-import yaml
-import asyncio
 import enum
 import time
+import asyncio
 
-# import SALPY_Monochromator
+from lsst.ts.idl.enums.ATMonochromator import Status as MonochromatorStatus
 
-__all__ = ['Model', 'ModelReply', 'MonochromatorStatus']
 
-_LOCAL_HOST = "127.0.0.1"
-_DEFAULT_PORT = 50000
+__all__ = ["Model", "ModelReply"]
 
 
 class ModelReply(enum.Enum):
@@ -21,34 +16,19 @@ class ModelReply(enum.Enum):
     REJECTED = "#RJCT"  # Rejected
 
 
-class MonochromatorStatus(enum.IntEnum):
-    SETTINGUP = 0
-    READY = 1
-    OFFLINE = 2
-    FAULT = 3
-
-
 class Model:
-    """A model class to represent the connection to the Monochromator. It implements all the
-    available commands from the hardware and ways to select a configuration, connect to the
-    Monochromator and so on.
+    """A model class to represent the connection to the Monochromator. It
+    implements all the available commands from the hardware and ways to select
+    a configuration, connect to the Monochromator and so on.
     """
-    def __init__(self, log):
 
-        self.simulation_mode = 1
+    def __init__(self, log):
 
         self.log = log
 
-        self.config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config/config.yaml')
-
-        with open(self.config_path, 'r') as stream:
-            self.config = yaml.load(stream)
-
-        self.host = _LOCAL_HOST
-        self.port = _DEFAULT_PORT
-        self.connection_timeout = 10.
-        self.read_timeout = 10.
-        self.move_timeout = 60.
+        self.connection_timeout = 10.0
+        self.read_timeout = 10.0
+        self.move_timeout = 60.0
 
         self.wait_ready_sleeptime = 0.5
 
@@ -59,80 +39,20 @@ class Model:
         self.cmd_lock = asyncio.Lock()
         self.controller_ready = False
 
-    @property
-    def recommended_settings(self):
-        """Recommended settings property.
-
-        Returns
-        -------
-        recommended_settings : str
-            Recommended settings read from Model configuration file.
-        """
-        return self.config['settingVersions']['recommendedSettingsVersion']
-
-    @property
-    def settings_labels(self):
-        """Recommended settings labels.
-
-        Returns
-        -------
-        recommended_settings_labels : str
-            Comma separated string with the valid setting labels read from Model configuration file.
-
-        """
-        valid_settings = ''
-
-        n_set = len(self.config['settingVersions']['recommendedSettingsLabels'])
-        for i, label in enumerate(self.config['settingVersions']['recommendedSettingsLabels']):
-            valid_settings += label
-            if i < n_set-1:
-                valid_settings += ','
-
-        return valid_settings
-
-    def setup(self, setting):
-        """Setup the model with the given setting.
-
-        Parameters
-        ----------
-        setting : str
-            A string with the selected setting label. Must match one on the configuration file.
-
-        Returns
-        -------
-
-        """
-
-        if len(setting) == 0:
-            setting = self.config['settingVersions']['recommendedSettingsVersion']
-            self.log.debug('Received empty setting label. Using default: %s', setting)
-
-        if setting not in self.config['settingVersions']['recommendedSettingsLabels']:
-            raise RuntimeError('Setting %s not a valid label. Must be one of %s.',
-                               setting,
-                               self.settings_labels)
-
-        self.host = self.config['setting'][setting].get('host', _LOCAL_HOST)
-        self.port = self.config['setting'][setting].get('port', _DEFAULT_PORT)
-        # by default, not in simulation mode
-        self.simulation_mode = self.config['setting'][setting].get('simulation', 0)
-
-    async def connect(self):
-        """Connect to the spectrograph controller's TCP/IP port.
-        """
-        self.log.debug(f"connecting to: {self.host}:{self.port}")
+    async def connect(self, host, port):
+        """Connect to the spectrograph controller's TCP/IP port."""
+        self.log.debug(f"connecting to: {host}:{port}")
         if self.connected:
             raise RuntimeError("Already connected")
-        host = _LOCAL_HOST if self.simulation_mode == 1 else self.host
-        self.connect_task = asyncio.open_connection(host=host, port=self.port)
-        self.reader, self.writer = await asyncio.wait_for(self.connect_task,
-                                                          timeout=self.connection_timeout)
+        self.connect_task = asyncio.open_connection(host=host, port=port)
+        self.reader, self.writer = await asyncio.wait_for(
+            self.connect_task, timeout=self.connection_timeout
+        )
 
-        self.log.debug(f"connected")
+        self.log.debug("connected")
 
     async def disconnect(self):
-        """Disconnect from the spectrograph controller's TCP/IP port.
-        """
+        """Disconnect from the spectrograph controller's TCP/IP port."""
         self.log.debug("disconnect")
         writer = self.writer
         self.reader = None
@@ -298,7 +218,9 @@ class Model:
         return ModelReply(cmd_reply)
 
     async def set_calibrate_wavelength(self, wavelength):
-        """Calibrate wavelength. Will make the current wavelength match the passed value.
+        """Calibrate wavelength.
+
+        Will make the current wavelength match the passed value.
 
         Parameters
         ----------
@@ -331,8 +253,12 @@ class Model:
         reply : ModelReply
 
         """
-        self.log.debug(f"Setting all: {wavelength} {grating} {entrance_slit} {exit_slit}")
-        cmd_reply = await self.send_cmd(f"!SET {wavelength} {grating} {entrance_slit} {exit_slit}")
+        self.log.debug(
+            f"Setting all: {wavelength} {grating} {entrance_slit} {exit_slit}"
+        )
+        cmd_reply = await self.send_cmd(
+            f"!SET {wavelength} {grating} {entrance_slit} {exit_slit}"
+        )
         return ModelReply(cmd_reply)
 
     async def wait_ready(self, cmd):
@@ -354,7 +280,9 @@ class Model:
             elif time.time() > start_time + self.move_timeout:
                 raise TimeoutError(f"Setting up {cmd} timed out.")
             elif status == MonochromatorStatus.FAULT:
-                raise RuntimeError(f"Controller in FAULT state while checking for {cmd}.")
+                raise RuntimeError(
+                    f"Controller in FAULT state while checking for {cmd}."
+                )
             elif status == MonochromatorStatus.OFFLINE:
                 raise RuntimeError(f"Controller OFFLINE while checking for {cmd}.")
 
