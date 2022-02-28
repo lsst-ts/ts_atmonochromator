@@ -40,7 +40,7 @@ class Model:
         self.controller_ready = False
 
     async def connect(self, host, port):
-        """Connect to the spectrograph controller's TCP/IP port."""
+        """Connect to the monochromator controller's TCP/IP port."""
         self.log.debug(f"connecting to: {host}:{port}")
         if self.connected:
             raise RuntimeError("Already connected")
@@ -52,7 +52,7 @@ class Model:
         self.log.debug("connected")
 
     async def disconnect(self):
-        """Disconnect from the spectrograph controller's TCP/IP port."""
+        """Disconnect from the monochromator controller's TCP/IP port."""
         self.log.debug("disconnect")
         writer = self.writer
         self.reader = None
@@ -86,6 +86,7 @@ class Model:
         """
         cmd_reply = await self.send_cmd("?WL")
         reply = cmd_reply.split()
+
         if reply[0] == "#WL":
             return float(reply[1])
         else:
@@ -117,6 +118,7 @@ class Model:
         """
         cmd_reply = await self.send_cmd("?ENS")
         reply = cmd_reply.split()
+
         if reply[0] == "#ENS":
             return float(reply[1])
         else:
@@ -301,7 +303,12 @@ class Model:
         with the final ">" stripped.
         """
         async with self.cmd_lock:
+            self.log.debug(f"Sending command of: {cmd}")
+            # await asyncio.sleep(1)
             self.writer.write(f"{cmd}\r\n".encode())
             await self.writer.drain()
+            # await asyncio.sleep(1)
             read_bytes = await asyncio.wait_for(self.reader.readline(), timeout=timeout)
-            return read_bytes.decode().strip()
+            reply = read_bytes.decode().strip()
+            self.log.debug(f"Got reply of: {reply}")
+            return reply

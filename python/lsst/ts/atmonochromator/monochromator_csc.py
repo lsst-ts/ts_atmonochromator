@@ -190,6 +190,9 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         await asyncio.sleep(self.model.read_timeout)
 
         # Check that the hardware status is ready, otherwise go to FAULT
+        # Note that when the controller first comes up, it will be in the
+        # SETTING_UP state until a status is requested, then it will
+        # become READY
         controller_status = await self.model.get_status()
         if controller_status != Status.READY:
             self.fault(
