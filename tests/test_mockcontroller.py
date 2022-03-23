@@ -18,18 +18,13 @@
 #
 # You should have received a copy of the GNU General Public License
 
-import sys
 import asyncio
-import logging
+import typing
 import unittest
 
 import numpy as np
 
 from lsst.ts import atmonochromator
-
-logger = logging.getLogger()
-logger.level = logging.DEBUG
-logger.addHandler(logging.StreamHandler(sys.stdout))
 
 # Standard timeout (seconds)
 STD_TIMEOUT = 10
@@ -38,9 +33,7 @@ STD_TIMEOUT = 10
 class MockTestCase(unittest.IsolatedAsyncioTestCase):
     """Test MockController"""
 
-    async def asyncSetUp(self):
-        self.writer = None
-
+    async def asyncSetUp(self) -> None:
         self.ctrl = atmonochromator.MockController()
 
         await asyncio.wait_for(self.ctrl.start(), timeout=STD_TIMEOUT)
@@ -49,7 +42,7 @@ class MockTestCase(unittest.IsolatedAsyncioTestCase):
         )
         self.reader, self.writer = await asyncio.wait_for(rw_coro, timeout=STD_TIMEOUT)
 
-    async def asyncTearDown(self):
+    async def asyncTearDown(self) -> None:
         if self.ctrl is not None:
             await asyncio.wait_for(self.ctrl.stop(), timeout=STD_TIMEOUT)
         if self.writer is not None:
@@ -57,7 +50,9 @@ class MockTestCase(unittest.IsolatedAsyncioTestCase):
             await self.writer.drain()
             self.writer.close()
 
-    async def send_cmd(self, cmd, timeout=STD_TIMEOUT):
+    async def send_cmd(
+        self, cmd: str, timeout: typing.Union[int, float] = STD_TIMEOUT
+    ) -> str:
         """Send a command to the mock controller and wait for the reply.
 
         Return the decoded reply as 0 or more lines of text
@@ -68,7 +63,7 @@ class MockTestCase(unittest.IsolatedAsyncioTestCase):
         read_bytes = await asyncio.wait_for(self.reader.readline(), timeout=timeout)
         return read_bytes.decode().strip()
 
-    async def test_wl(self):
+    async def test_wl(self) -> None:
         # setup controller
         reply_lines = await self.send_cmd("!RST 1\r\n")
         status = reply_lines.split()
@@ -119,7 +114,7 @@ class MockTestCase(unittest.IsolatedAsyncioTestCase):
         assert status[0] == self.ctrl.our
         assert current_wave == self.ctrl.wavelength
 
-    async def test_gr(self):
+    async def test_gr(self) -> None:
         # setup controller
         reply_lines = await self.send_cmd("!RST 1\r\n")
         status = reply_lines.split()
@@ -148,7 +143,7 @@ class MockTestCase(unittest.IsolatedAsyncioTestCase):
                 assert status[0] != self.ctrl.ok
                 assert current_value == self.ctrl.grating
 
-    async def test_ens(self):
+    async def test_ens(self) -> None:
         # setup controller
         reply_lines = await self.send_cmd("!RST 1\r\n")
         status = reply_lines.split()
@@ -188,7 +183,7 @@ class MockTestCase(unittest.IsolatedAsyncioTestCase):
                 assert status[0] == self.ctrl.rejected
                 assert current_value == self.ctrl.entrance_slit_position
 
-    async def test_exs(self):
+    async def test_exs(self) -> None:
         # setup controller
         reply_lines = await self.send_cmd("!RST 1\r\n")
         status = reply_lines.split()
@@ -228,7 +223,7 @@ class MockTestCase(unittest.IsolatedAsyncioTestCase):
                 assert status[0] == self.ctrl.rejected
                 assert current_value == self.ctrl.exit_slit_position
 
-    async def test_set(self):
+    async def test_set(self) -> None:
         # setup controller
         reply_lines = await self.send_cmd("!RST 1\r\n")
         status = reply_lines.split()

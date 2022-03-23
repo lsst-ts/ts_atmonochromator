@@ -22,6 +22,7 @@ import os
 import glob
 import pathlib
 import unittest
+import typing
 
 from lsst.ts import salobj
 
@@ -36,24 +37,26 @@ LONG_TIMEOUT = 120.0
 
 
 class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
+    async def asyncSetUp(self) -> None:
         salobj.set_random_lsst_dds_partition_prefix()
 
     def basic_make_csc(
-        self, initial_state, config_dir, simulation_mode, settings_to_apply=""
-    ):
+        self,
+        initial_state: typing.Union[salobj.sal_enums.State, int],
+        config_dir: typing.Union[str, pathlib.Path, None],
+        simulation_mode: int,
+        override: str = "",
+    ) -> salobj.base_csc.BaseCsc:
         return atmonochromator.MonochromatorCsc(
             initial_state=initial_state,
             config_dir=config_dir,
-            settings_to_apply=settings_to_apply,
+            override=override,
             simulation_mode=simulation_mode,
         )
 
-    async def test_basics(self):
-        async with self.make_csc(initial_state=salobj.State.ENABLED, simulation_mode=1):
+    async def test_basics(self) -> None:
 
-            # Check that settingVersions was published
-            await self.remote.evt_settingVersions.next(flush=False, timeout=STD_TIMEOUT)
+        async with self.make_csc(initial_state=salobj.State.ENABLED, simulation_mode=1):
 
             # check settings applied events
             sim_config = atmonochromator.SimulationConfiguration()
@@ -112,12 +115,12 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
                 slitPosition=exit_slit.width,
             )
 
-    async def test_bin_script(self):
+    async def test_bin_script(self) -> None:
         await self.check_bin_script(
             name="ATMonochromator", index=None, exe_name="atmonochromator_csc.py"
         )
 
-    async def test_config(self):
+    async def test_config(self) -> None:
         """Test MonochromatorCsc configuration validator."""
         async with self.make_csc(simulation_mode=1, config_dir=TEST_CONFIG_DIR):
             await self.assert_next_summary_state(salobj.State.STANDBY)
@@ -129,15 +132,10 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
                 with self.subTest(bad_config_name=bad_config_name):
                     with salobj.assertRaisesAckError():
                         await self.remote.cmd_start.set_start(
-                            settingsToApply=bad_config_name, timeout=STD_TIMEOUT
+                            configurationOverride=bad_config_name, timeout=STD_TIMEOUT
                         )
 
-            await self.remote.cmd_start.set_start(
-                settingsToApply="all_fields", timeout=STD_TIMEOUT
-            )
-            await self.assert_next_summary_state(salobj.State.DISABLED)
-
-    async def test_standard_state_transitions(self):
+    async def test_standard_state_transitions(self) -> None:
         """Test standard MonochromatorCsc state transitions.
 
         The initial state is STANDBY.

@@ -18,7 +18,6 @@
 #
 # You should have received a copy of the GNU General Public License
 
-import sys
 import asyncio
 import itertools
 import logging
@@ -29,10 +28,6 @@ import numpy as np
 from lsst.ts import atmonochromator
 from lsst.ts.idl.enums.ATMonochromator import Status
 
-logger = logging.getLogger()
-logger.level = logging.DEBUG
-logger.addHandler(logging.StreamHandler(sys.stdout))
-
 # Standard timeout (seconds)
 STD_TIMEOUT = 10
 
@@ -40,8 +35,8 @@ STD_TIMEOUT = 10
 class ModelTestCase(unittest.IsolatedAsyncioTestCase):
     """Test Model"""
 
-    async def asyncSetUp(self):
-        self.model = atmonochromator.Model(logger)
+    async def asyncSetUp(self) -> None:
+        self.model = atmonochromator.Model(logging.getLogger())
 
         self.ctrl = atmonochromator.MockController()
 
@@ -53,14 +48,14 @@ class ModelTestCase(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(self.ctrl.start(), timeout=STD_TIMEOUT)
         await self.model.connect(host=self.host, port=self.ctrl.port)
 
-    async def asyncTearDown(self):
+    async def asyncTearDown(self) -> None:
         if self.ctrl is not None:
             await asyncio.wait_for(self.ctrl.stop(), timeout=STD_TIMEOUT)
             await self.model.disconnect()
         if self.writer is not None:
             self.writer.close()
 
-    async def test_wavelength(self):
+    async def test_wavelength(self) -> None:
         # setup controller
         reply = await self.model.reset_controller()
         assert reply == atmonochromator.ModelReply.OK
@@ -94,7 +89,7 @@ class ModelTestCase(unittest.IsolatedAsyncioTestCase):
                 assert reply == atmonochromator.ModelReply.REJECTED
                 assert current_wave == self.ctrl.wavelength
 
-    async def test_grating(self):
+    async def test_grating(self) -> None:
         # setup controller
         reply = await self.model.reset_controller()
         assert reply == atmonochromator.ModelReply.OK
@@ -128,7 +123,7 @@ class ModelTestCase(unittest.IsolatedAsyncioTestCase):
                 assert reply == atmonochromator.ModelReply.REJECTED
                 assert current_grating == self.ctrl.grating
 
-    async def test_ens(self):
+    async def test_ens(self) -> None:
         # setup controller
         reply = await self.model.reset_controller()
         assert reply == atmonochromator.ModelReply.OK
@@ -162,7 +157,7 @@ class ModelTestCase(unittest.IsolatedAsyncioTestCase):
                 assert reply == atmonochromator.ModelReply.REJECTED
                 assert current_ens == self.ctrl.entrance_slit_position
 
-    async def test_exs(self):
+    async def test_exs(self) -> None:
         # setup controller
         reply = await self.model.reset_controller()
         assert reply == atmonochromator.ModelReply.OK
@@ -196,16 +191,28 @@ class ModelTestCase(unittest.IsolatedAsyncioTestCase):
                 assert reply == atmonochromator.ModelReply.REJECTED
                 assert current_ens == self.ctrl.exit_slit_position
 
-    async def test_set(self):
+    async def test_set(self) -> None:
 
         # setup controller
         reply = await self.model.reset_controller()
         assert reply == atmonochromator.ModelReply.OK
 
-        wave_range = np.linspace(*self.ctrl.wavelength_range, 3)
+        wave_range = np.linspace(
+            float(self.ctrl.wavelength_range[0]),
+            float(self.ctrl.wavelength_range[1]),
+            3,
+        )
         grt_range = self.ctrl.grating_options
-        es_range = np.linspace(*self.ctrl.entrance_slit_range, 3)
-        ex_range = np.linspace(*self.ctrl.exit_slit_range, 3)
+        es_range = np.linspace(
+            float(self.ctrl.entrance_slit_range[0]),
+            float(self.ctrl.entrance_slit_range[1]),
+            3,
+        )
+        ex_range = np.linspace(
+            float(self.ctrl.exit_slit_range[0]),
+            float(self.ctrl.exit_slit_range[1]),
+            3,
+        )
 
         for wave, gtr, es, ex in itertools.product(
             wave_range, grt_range, es_range, ex_range
@@ -218,7 +225,7 @@ class ModelTestCase(unittest.IsolatedAsyncioTestCase):
                 assert es == self.ctrl.entrance_slit_position
                 assert ex == self.ctrl.exit_slit_position
 
-    async def test_status(self):
+    async def test_status(self) -> None:
 
         reply = await self.model.reset_controller()
         assert reply == atmonochromator.ModelReply.OK

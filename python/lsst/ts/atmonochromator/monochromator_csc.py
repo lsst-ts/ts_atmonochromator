@@ -1,5 +1,8 @@
 import asyncio
 import traceback
+import typing
+import pathlib
+import contextlib
 
 from lsst.ts import salobj
 from lsst.ts import utils
@@ -50,34 +53,32 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
 
     def __init__(
         self,
-        config_dir=None,
-        initial_state=salobj.State.STANDBY,
-        settings_to_apply="",
-        simulation_mode=0,
-    ):
+        config_dir: typing.Union[str, pathlib.Path, None] = None,
+        initial_state: salobj.State = salobj.State.STANDBY,
+        override: str = "",
+        simulation_mode: int = 0,
+    ) -> None:
         super().__init__(
             name="ATMonochromator",
             index=0,
             config_schema=CONFIG_SCHEMA,
             config_dir=config_dir,
             initial_state=initial_state,
-            settings_to_apply=settings_to_apply,
+            override=override,
             simulation_mode=simulation_mode,
         )
-
-        self.detailed_state = DetailedState.NOT_ENABLED
 
         self.model = Model(self.log)
 
         self.want_connection = False
         self.health_monitor_task = utils.make_done_future()
 
-        self.mock_ctrl = None
+        self._mock_ctrl: typing.Optional[MockController] = None
 
         self.connect_task = utils.make_done_future()
 
     @property
-    def detailed_state(self):
+    def detailed_state(self) -> int:
         """Set or get the detailed state as a `DetailedState` enum.
 
         If you set the state then it is reported as a detailedState event.
@@ -91,14 +92,32 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         """
         return self.evt_detailedState.data.detailedState
 
-    @detailed_state.setter
-    def detailed_state(self, detailed_state):
-        # cast state from an int or DetailedState to a DetailedState,
-        # and reject invalid int values with ValueError
-        new_state = DetailedState(detailed_state)
-        self.evt_detailedState.set_put(detailedState=new_state)
+    @property
+    def mock_ctrl(self) -> MockController:
+        assert isinstance(self._mock_ctrl, MockController)
+        return self._mock_ctrl
 
-    def assert_ready(self):
+    @mock_ctrl.setter
+    def mock_ctrl(self, mock_ctrl: MockController) -> None:
+        self._mock_ctrl = mock_ctrl
+
+    def reset_mock_ctrl(self) -> None:
+        self._mock_ctrl = None
+
+    def is_mock_ctrl_set(self) -> bool:
+        return self._mock_ctrl is not None
+
+    async def set_detailed_state(self, detailed_state: DetailedState) -> None:
+        """Set and publish detailed state.
+
+        Parameters
+        ----------
+        detailed_state : DetailedState
+            New value for detailed state.
+        """
+        await self.evt_detailedState.set_write(detailedState=detailed_state)
+
+    def assert_ready(self) -> None:
         """Assert summary state is enabled and detailed state is READY.
 
         Raises
@@ -113,10 +132,17 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             )
 
     @staticmethod
-    def get_config_pkg():
+    def get_config_pkg() -> str:
         return "ts_config_atcalsys"
 
-    async def configure(self, config):
+    async def configure(self, config: typing.Any) -> None:
+        """Configure the CSC.
+
+        Parameters
+        ----------
+        config : object
+            CSC configuration.
+        """
         if self.simulation_mode == 0:
             self.log.debug("Standard operation mode.")
         elif self.simulation_mode == 1:
@@ -131,7 +157,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 f"Expecting either 0 or 1."
             )
 
-        self.evt_settingsAppliedMonoCommunication.set_put(
+        await self.evt_settingsAppliedMonoCommunication.set_write(
             ip=config.host,
             portRange=config.port,
             connectionTimeout=config.connection_timeout,
@@ -139,7 +165,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             writeTimeout=config.write_timeout,
             force_output=True,
         )
-        self.evt_settingsAppliedMonochromatorRanges.set_put(
+        await self.evt_settingsAppliedMonochromatorRanges.set_write(
             wavelengthGR1=config.wavelength_gr1,
             wavelengthGR1_GR2=config.wavelength_gr1_gr2,
             wavelengthGR2=config.wavelength_gr2,
@@ -149,7 +175,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             maxWavelength=config.max_wavelength,
             force_output=True,
         )
-        self.evt_settingsAppliedMonoHeartbeat.set_put(
+        await self.evt_settingsAppliedMonoHeartbeat.set_write(
             period=config.period,
             timeout=config.timeout,
             force_output=True,
@@ -159,7 +185,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.model.read_timeout = config.read_timeout
         self.model.move_timeout = config.write_timeout
 
-    async def connect(self):
+    async def connect(self) -> None:
         """Connect to the hardware controller. Disconnect first, if connected.
 
         If simulating, start the mock controller just before connecting.
@@ -195,109 +221,107 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         # become READY
         controller_status = await self.model.get_status()
         if controller_status != Status.READY:
-            self.fault(
+            await self.fault(
                 code=ErrorCode.HARDWARE_NOT_READY,
                 report=f"Controller is not ready. Current status is "
                 f"{controller_status!r}",
             )
         else:
-            self.evt_status.set_put(status=controller_status)
+            await self.evt_status.set_write(status=controller_status)
 
         wavelength = await self.model.get_wavelength()
-        self.evt_wavelength.set_put(wavelength=wavelength, force_output=True)
+        await self.evt_wavelength.set_write(wavelength=wavelength, force_output=True)
 
         grating = await self.model.get_grating()
-        self.evt_selectedGrating.set_put(gratingType=grating, force_output=True)
+        await self.evt_selectedGrating.set_write(gratingType=grating, force_output=True)
 
         entrance_slit = await self.model.get_entrance_slit()
-        self.evt_entrySlitWidth.set_put(width=entrance_slit, force_output=True)
-        self.evt_slitWidth.set_put(
+        await self.evt_entrySlitWidth.set_write(width=entrance_slit, force_output=True)
+        await self.evt_slitWidth.set_write(
             slit=Slit.ENTRY,
             slitPosition=entrance_slit,
             force_output=True,
         )
 
         exit_slit = await self.model.get_exit_slit()
-        self.evt_exitSlitWidth.set_put(width=exit_slit, force_output=True)
-        self.evt_slitWidth.set_put(
+        await self.evt_exitSlitWidth.set_write(width=exit_slit, force_output=True)
+        await self.evt_slitWidth.set_write(
             slit=Slit.EXIT,
             slitPosition=exit_slit,
             force_output=True,
         )
         self.health_monitor_task = asyncio.create_task(self.health_monitor_loop())
-        self.detailed_state = DetailedState.READY
+        await self.set_detailed_state(DetailedState.READY)
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Disconnect from the hardware controller. A no-op if not connected.
 
         Stop the mock controller, if running.
         """
-        self.detailed_state = DetailedState.NOT_ENABLED
         self.health_monitor_task.cancel()
         if self.model.connected:
             try:
                 await asyncio.wait_for(self.model.disconnect(), DISCONNECT_TIMEOUT)
             except asyncio.TimeoutError:
                 self.log.warning("Timed out disconnecting from controller.")
-        if self.mock_ctrl is not None:
+        if self.is_mock_ctrl_set():
             try:
                 await self.mock_ctrl.stop(DISCONNECT_TIMEOUT)
             except asyncio.TimeoutError:
                 self.log.warning("Timed out stopping the mock controller.")
-            self.mock_ctrl = None
+            self.reset_mock_ctrl()
 
-    async def handle_summary_state(self):
+    async def handle_summary_state(self) -> None:
+        """Called when the summary state has changed."""
+
         if self.disabled_or_enabled:
             if not self.model.connected and self.connect_task.done():
                 try:
                     await self.connect()
+                    await self.set_detailed_state(DetailedState.READY)
                 except Exception as e:
-                    self.fault(
+                    await self.fault(
                         code=ErrorCode.CONNECTION_FAILED,
                         report="Error trying to connect.",
                         traceback=traceback.format_exc(),
                     )
                     raise e
-
         else:
+
+            await self.set_detailed_state(DetailedState.NOT_ENABLED)
+
             await self.disconnect()
 
-    async def do_calibrateWavelength(self, data):
+    async def do_calibrateWavelength(self, data: salobj.type_hints.BaseMsgType) -> None:
         """Calibrate wavelength.
 
         Parameters
         ----------
-        data : ATMonochromator_command_calibrateWavelengthC
-
+        data : ``cmd_calibrateWavelength.DataType``
+            Command data
         """
         self.assert_ready()
-        self.detailed_state = DetailedState.CALIBRATING_WAVELENGTH
 
-        try:
+        async with self.handle_detailed_state(DetailedState.CALIBRATING_WAVELENGTH):
+
             reply = await self.model.set_calibrate_wavelength(data.wavelength)
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply!r} from controller.")
 
             await self.model.wait_ready("calibrate wavelength")
-        except Exception as e:
-            self.log.error("Error executing command 'calibrateWavelength'.")
-            self.log.exception(e)
-            raise e
-        finally:
-            self.detailed_state = DetailedState.READY
 
-    async def do_changeSlitWidth(self, data):
+    async def do_changeSlitWidth(self, data: salobj.type_hints.BaseMsgType) -> None:
         """Change slit width.
 
         Parameters
         ----------
-        data : ATMonochromator_command_changeSlitWidthC
-
+        data : ``cmd_changeSlitWidth.DataType``
+            Command data
         """
         self.assert_ready()
-        self.detailed_state = DetailedState.CHANGING_SLIT_WIDTH
 
-        try:
+        async with self.handle_detailed_state(DetailedState.CHANGING_SLIT_WIDTH):
+
             if data.slit == Slit.ENTRY:
                 reply = await self.model.set_entrance_slit(data.slitWidth)
             elif data.slit == Slit.EXIT:
@@ -313,29 +337,28 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
 
                 if data.slit == Slit.ENTRY:
                     new_pos = await self.model.get_entrance_slit()
-                    self.evt_entrySlitWidth.set_put(width=new_pos, force_output=True)
+                    await self.evt_entrySlitWidth.set_write(
+                        width=new_pos, force_output=True
+                    )
                 elif data.slit == Slit.EXIT:
                     new_pos = await self.model.get_exit_slit()
-                    self.evt_exitSlitWidth.set_put(width=new_pos, force_output=True)
-                self.evt_slitWidth.set_put(slit=data.slit, slitPosition=new_pos)
-        except Exception as e:
-            self.log.error("Error executing command 'changeSlitWidth'.")
-            self.log.exception(e)
-            raise e
-        finally:
-            self.detailed_state = DetailedState.READY
+                    await self.evt_exitSlitWidth.set_write(
+                        width=new_pos, force_output=True
+                    )
+                await self.evt_slitWidth.set_write(slit=data.slit, slitPosition=new_pos)
 
-    async def do_changeWavelength(self, data):
+    async def do_changeWavelength(self, data: salobj.type_hints.BaseMsgType) -> None:
         """Change wavelength.
 
         Parameters
         ----------
-        data : ATMonochromator_command_changeWavelengthC
-
+        data : ``cmd_changeWavelength.DataType``
+            Command data
         """
         self.assert_ready()
-        self.detailed_state = DetailedState.CHANGING_WAVELENGTH
-        try:
+
+        async with self.handle_detailed_state(DetailedState.CHANGING_WAVELENGTH):
+
             reply = await self.model.set_wavelength(data.wavelength)
 
             if reply != ModelReply.OK:
@@ -347,35 +370,36 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 wavelength = await self.model.get_wavelength()
                 self.evt_wavelength.set_put(wavelength=wavelength)
 
-        except Exception as e:
-            self.log.error("Error executing command 'changeWavelength'")
-            self.log.exception(e)
-            raise e
-        finally:
-            self.detailed_state = DetailedState.READY
+    async def do_power(self, data: salobj.type_hints.BaseMsgType) -> None:
+        """Power up controller.
 
-    async def do_power(self, data):
-        """
+        NOT IMPLEMENTED.
 
         Parameters
         ----------
-        data : ATMonochromator_command_powerC
+        data : ``cmd_power.DataType``
+            Command data
 
+        Raises
+        ------
+        NotImplementedError
+            Command not implemented yet.
         """
         self.assert_enabled()
         raise NotImplementedError("Power command not implemented.")
 
-    async def do_selectGrating(self, data):
+    async def do_selectGrating(self, data: salobj.type_hints.BaseMsgType) -> None:
         """Select grating.
 
         Parameters
         ----------
-        data : ATMonochromator_command_selectGratingC
-
+        data : ``cmd_selectGrating.DataType``
+            Command data
         """
         self.assert_ready()
-        self.detailed_state = DetailedState.SELECTING_GRATING
-        try:
+
+        async with self.handle_detailed_state(DetailedState.SELECTING_GRATING):
+
             reply = await self.model.set_grating(data.gratingType)
 
             if reply != ModelReply.OK:
@@ -386,24 +410,21 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 grating = await self.model.get_grating()
                 self.evt_selectedGrating.set_put(gratingType=grating, force_output=True)
 
-        except Exception as e:
-            self.log.exception(e)
-            raise e
-        finally:
-            self.detailed_state = DetailedState.READY
-
-    async def do_updateMonochromatorSetup(self, data):
+    async def do_updateMonochromatorSetup(
+        self, data: salobj.type_hints.BaseMsgType
+    ) -> None:
         """Change wavelength, grating, entry and exit slit values at the same
         time.
 
         Parameters
         ----------
-        data : ATMonochromator_command_updateMonochromatorSetupC
-
+        data : ``cmd_updateMonochromatorSetup``
+            Command data
         """
         self.assert_ready()
-        self.detailed_state = DetailedState.UPDATING_SETUP
-        try:
+
+        async with self.handle_detailed_state(DetailedState.UPDATING_SETUP):
+
             reply = await self.model.set_all(
                 wavelength=data.wavelength,
                 grating=data.gratingType,
@@ -438,13 +459,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                     force_output=True,
                 )
 
-        except Exception as e:
-            self.log.exception(e)
-            raise e
-        finally:
-            self.detailed_state = DetailedState.READY
-
-    async def health_monitor_loop(self):
+    async def health_monitor_loop(self) -> None:
         """Monitor the state of the hardware."""
 
         start_tai = utils.current_tai()
@@ -452,22 +467,45 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         while self.summary_state == salobj.State.ENABLED:
             try:
                 controller_status = await self.model.get_status()
-                self.evt_status.set_put(status=controller_status)
+                await self.evt_status.set_write(status=controller_status)
                 if controller_status == Status.FAULT:
-                    self.fault(
+                    await self.fault(
                         code=ErrorCode.HARDWARE_ERROR,
                         report="Hardware controller reported FAULT.",
                         traceback="",
                     )
                     return
                 curr_tai = utils.current_tai()
-                self.tel_timestamp.set_put(timestamp=curr_tai)
-                self.tel_loopTime.set_put(loopTime=curr_tai - start_tai)
+                await self.tel_timestamp.set_write(timestamp=curr_tai)
+                await self.tel_loopTime.set_write(loopTime=curr_tai - start_tai)
                 await asyncio.sleep(self.heartbeat_interval)
             except Exception:
-                self.fault(
+                await self.fault(
                     code=ErrorCode.MISC,
                     report="Health monitor loop unexpectedly died.",
                     traceback=traceback.format_exc(),
                 )
                 return
+
+    @contextlib.asynccontextmanager
+    async def handle_detailed_state(
+        self,
+        detailed_state_initial: DetailedState,
+        detailed_state_final: DetailedState = DetailedState.READY,
+    ) -> typing.AsyncGenerator[None, None]:
+        """A context manager to handle changing the detailed state to an
+        initial value and transitioning back to a final state.
+
+        Parameters
+        ----------
+        detailed_state_initial : DetailedState
+            Initial detailed state.
+        detailed_state_final : DetailedState, optional
+            Final detailed state. By default, DetailedState.READY.
+        """
+
+        try:
+            await self.set_detailed_state(detailed_state=detailed_state_initial)
+            yield
+        finally:
+            await self.set_detailed_state(detailed_state=detailed_state_final)
