@@ -2,12 +2,13 @@ __all__ = ["MockController", "SimulationConfiguration"]
 
 import asyncio
 import logging
+import typing
 
 from lsst.ts.idl.enums.ATMonochromator import Status as MonochromatorStatus
 
 
 class SimulationConfiguration:
-    def __init__(self):
+    def __init__(self) -> None:
         self.host = "127.0.0.1"
         self.port = 0
         self.connection_timeout = 10.0
@@ -31,12 +32,12 @@ class MockController:
     https://confluence.lsstcorp.org/display/LTS/Monochromator+TCP+Protocol
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.config = SimulationConfiguration()
 
         self.log = logging.getLogger("MockController")
 
-        self.server = None
+        self.server: typing.Optional[asyncio.base_events.Server] = None
 
         self.wait_time = 0.1
 
@@ -55,13 +56,6 @@ class MockController:
 
         self.exit_slit_position = 0.0
 
-        # responses to commands:
-        self.ok = "#OK"  # Accepted command
-        self.our = "#OUR"  # Out of range
-        self.invalid = "??"  # Invalid command
-        self.busy = "#BUSY"  # Device busy executing another command
-        self.rejected = "#RJCT"  # Rejected
-
         self._cmds = {
             "!WL": self.set_wl,
             "!GR": self.set_gr,
@@ -78,18 +72,38 @@ class MockController:
         }
 
     @property
-    def exit_slit_range(self):
+    def exit_slit_range(self) -> typing.Tuple[float, float]:
         return self.config.min_slit_width, self.config.max_slit_width
 
     @property
-    def entrance_slit_range(self):
+    def entrance_slit_range(self) -> typing.Tuple[float, float]:
         return self.config.min_slit_width, self.config.max_slit_width
 
     @property
-    def wavelength_range(self):
+    def wavelength_range(self) -> typing.Tuple[float, float]:
         return self.config.min_wavelength, self.config.min_wavelength
 
-    async def start(self):
+    @property
+    def ok(self) -> str:
+        return "#OK"  # Accepted command
+
+    @property
+    def our(self) -> str:
+        return "#OUR"  # Out of range
+
+    @property
+    def invalid(self) -> str:
+        return "??"  # Invalid command
+
+    @property
+    def busy(self) -> str:
+        return "#BUSY"  # Device busy executing another command
+
+    @property
+    def rejected(self) -> str:
+        return "#RJCT"  # Rejected
+
+    async def start(self) -> None:
         """Start the TCP/IP server, set start_task Done
         and start the command loop.
         """
@@ -108,7 +122,7 @@ class MockController:
         )
         self.status = MonochromatorStatus.READY
 
-    async def stop(self, timeout=5):
+    async def stop(self, timeout: float = 5.0) -> None:
         """Stop the TCP/IP server."""
         if self.server is None:
             return
@@ -119,19 +133,29 @@ class MockController:
         await asyncio.wait_for(server.wait_closed(), timeout=timeout)
         MonochromatorStatus.OFFLINE
 
-    async def cmd_loop(self, reader, writer):
+    async def cmd_loop(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        """Execute the server control loop.
+
+        Parameters
+        ----------
+        reader : asyncio.StreamReader
+            Server stream reader.
+        writer : asyncio.StreamWrite
+            Server stream writer.
+        """
         self.log.info("cmd_loop begins")
 
         while True:
-            # Write string specifing that server is ready
-            line = await reader.readline()
-            line = line.decode()
-            if not line:
+            _line = (await reader.readline()).decode()
+            if not _line:
                 # connection lost; close the writer and exit the loop
                 writer.close()
                 return
-            line = line.strip().split()
-            self.log.debug(f"read command: {line!r}")
+            self.log.debug(f"read command: {_line!r}")
+
+            line = _line.strip().split()
             if line:
                 try:
                     if len(line) > 0 and line[0] in self._cmds:
@@ -148,7 +172,7 @@ class MockController:
                     self.log.exception(f"command {line} failed")
                 await writer.drain()
 
-    async def set_wl(self, args):
+    async def set_wl(self, args: typing.List[str]) -> str:
         """Set wavelength, range.
 
         Parameters
@@ -180,8 +204,6 @@ class MockController:
         if not (self.wavelength_range[0] <= new_wl <= self.wavelength_range[1]):
             return self.our
 
-        self.busy = True
-
         # Give control back to event loop for responsiveness and to simulate
         # action
         await asyncio.sleep(self.wait_time)
@@ -195,11 +217,9 @@ class MockController:
         elif self.wavelength < self.wavelength_range[0]:
             self.wavelength = self.wavelength_range[0]
 
-        self.busy = False
-
         return self.ok
 
-    async def set_gr(self, args):
+    async def set_gr(self, args: typing.List[str]) -> str:
         """Select grating.
 
         Parameters
@@ -232,19 +252,15 @@ class MockController:
         if new_gr not in self.grating_options:
             return self.our
 
-        self.busy = True
-
         # Give control back to event loop for responsiveness and to simulate
         # action
         await asyncio.sleep(self.wait_time)
 
         self.grating = new_gr
 
-        self.busy = False
-
         return self.ok
 
-    async def set_ens(self, args):
+    async def set_ens(self, args: typing.List[str]) -> str:
         """Select entrance slit width.
 
         Parameters
@@ -276,19 +292,15 @@ class MockController:
         if not (self.entrance_slit_range[0] <= new_ens <= self.entrance_slit_range[1]):
             return self.our
 
-        self.busy = True
-
         # Give control back to event loop for responsiveness and to simulate
         # action
         await asyncio.sleep(self.wait_time)
 
         self.entrance_slit_position = new_ens
 
-        self.busy = False
-
         return self.ok
 
-    async def set_exs(self, args):
+    async def set_exs(self, args: typing.List[str]) -> str:
         """Select exit slit width.
 
         Parameters
@@ -320,19 +332,15 @@ class MockController:
         if not (self.exit_slit_range[0] <= new_exs <= self.exit_slit_range[1]):
             return self.our
 
-        self.busy = True
-
         # Give control back to event loop for responsiveness and to
         # simulate action
         await asyncio.sleep(self.wait_time)
 
         self.exit_slit_position = new_exs
 
-        self.busy = False
-
         return self.ok
 
-    async def set_clw(self, args):
+    async def set_clw(self, args: typing.List[str]) -> str:
         """Calibrate the wavelength with the current value.
 
         Set the value for wavelength offset.
@@ -363,22 +371,18 @@ class MockController:
         except Exception:
             return self.rejected
 
-        exit_0 = self.exit_slit_position[0]
-        exit_1 = self.exit_slit_position[1]
+        exit_0 = self.exit_slit_range[0]
+        exit_1 = self.exit_slit_range[1]
         new_w = self.wavelength + new_offset
 
         if not (exit_0 <= new_w <= exit_1):
             return self.our
 
-        self.busy = True
-
         self.wavelength_offset = new_offset
-
-        self.busy = False
 
         return self.ok
 
-    async def set_rst(self, args):
+    async def set_rst(self, args: typing.List[str]) -> str:
         """Reset device and go to initial state.
 
 
@@ -414,7 +418,6 @@ class MockController:
 
         self.log.debug("Starting rst")
         self.status = MonochromatorStatus.SETTING_UP
-        self.busy = True
 
         await asyncio.sleep(self.wait_time)
 
@@ -434,12 +437,11 @@ class MockController:
         await asyncio.sleep(self.wait_time)
 
         self.status = MonochromatorStatus.READY
-        self.busy = False
 
         self.log.debug("Done rst")
         return self.ok
 
-    async def set_set(self, args):
+    async def set_set(self, args: typing.List[str]) -> str:
         """Set all parameters.
 
         Parameters
@@ -489,7 +491,7 @@ class MockController:
         else:
             return self.ok
 
-    async def get_wl(self, args):
+    async def get_wl(self, args: typing.List[str]) -> str:
         """Return parsed string with current wavelength.
 
         Parameters
@@ -505,7 +507,7 @@ class MockController:
         """
         return f"#WL {self.wavelength+self.wavelength_offset}"
 
-    async def get_gr(self, args):
+    async def get_gr(self, args: typing.List[str]) -> str:
         """Return parsed string with current grating.
 
         Parameters
@@ -520,7 +522,7 @@ class MockController:
         """
         return f"#GR {self.grating}"
 
-    async def get_ens(self, args):
+    async def get_ens(self, args: typing.List[str]) -> str:
         """Return parsed string with current entrance slit position.
 
         Parameters
@@ -535,7 +537,7 @@ class MockController:
         """
         return f"#ENS {self.entrance_slit_position}"
 
-    async def get_exs(self, args):
+    async def get_exs(self, args: typing.List[str]) -> str:
         """Return parsed string with current exit slit position.
 
         Parameters
@@ -550,7 +552,7 @@ class MockController:
         """
         return f"#EXS {self.exit_slit_position}"
 
-    async def get_swst(self, args):
+    async def get_swst(self, args: typing.List[str]) -> str:
         """Query Software status
 
         Parameters
