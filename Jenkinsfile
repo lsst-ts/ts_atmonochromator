@@ -39,9 +39,9 @@ pipeline {
         stage ('Install Requirements And Update Branches') {
             steps {
                 // When using the docker container, we need to change
-                // the HOME path to WORKSPACE to have the authority
+                // the WHOME path to WORKSPACE to have the authority
                 // to install the packages.
-                withEnv(["HOME=${env.WORKSPACE}"]) {
+                withEnv(["WHOME=${env.WORKSPACE}"]) {
                     sh """
                         source /home/saluser/.setup_dev.sh || echo loading env failed. Continuing...
                         cd /home/saluser/repos/ts_utils
@@ -67,12 +67,12 @@ pipeline {
 
         stage('Unit Tests and Coverage Analysis') {
             steps {
-                // Direct the HOME to WORKSPACE for pip to get the
+                // Direct the WHOME to WORKSPACE for pip to get the
                 // installed library.
                 // 'PATH' can only be updated in a single shell block.
                 // We can not update PATH in 'environment' block.
                 // Pytest needs to export the junit report.
-                withEnv(["HOME=${env.WORKSPACE}"]) {
+                withEnv(["WHOME=${env.WORKSPACE}"]) {
                     sh """
                         source /home/saluser/.setup_dev.sh || echo loading env failed. Continuing...
                         setup -k -r .
@@ -83,7 +83,7 @@ pipeline {
         }
         stage('Build and Upload Documentation') {
             steps {
-                withEnv(["HOME=${env.WORKSPACE}"]) {
+                withEnv(["WHOME=${env.WORKSPACE}"]) {
                     sh """
                         source /home/saluser/.setup_dev.sh || echo loading env failed. Continuing...
                         pip install .
