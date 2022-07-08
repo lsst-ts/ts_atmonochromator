@@ -368,7 +368,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await self.model.wait_ready("change wavelength")
 
                 wavelength = await self.model.get_wavelength()
-                self.evt_wavelength.set_put(wavelength=wavelength)
+                await self.evt_wavelength.set_write(wavelength=wavelength)
 
     async def do_power(self, data: salobj.type_hints.BaseMsgType) -> None:
         """Power up controller.
@@ -408,7 +408,9 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await self.model.wait_ready("select grating")
 
                 grating = await self.model.get_grating()
-                self.evt_selectedGrating.set_put(gratingType=grating, force_output=True)
+                await self.evt_selectedGrating.set_write(
+                    gratingType=grating, force_output=True
+                )
 
     async def do_updateMonochromatorSetup(
         self, data: salobj.type_hints.BaseMsgType
@@ -438,22 +440,30 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await self.model.wait_ready("update monochromator setup.")
 
                 wavelength = await self.model.get_wavelength()
-                self.evt_wavelength.set_put(wavelength=wavelength, force_output=True)
+                await self.evt_wavelength.set_write(
+                    wavelength=wavelength, force_output=True
+                )
 
                 grating = await self.model.get_grating()
-                self.evt_selectedGrating.set_put(gratingType=grating, force_output=True)
+                await self.evt_selectedGrating.set_write(
+                    gratingType=grating, force_output=True
+                )
 
                 entrance_slit = await self.model.get_entrance_slit()
-                self.evt_entrySlitWidth.set_put(width=entrance_slit, force_output=True)
-                self.evt_slitWidth.set_put(
+                await self.evt_entrySlitWidth.set_write(
+                    width=entrance_slit, force_output=True
+                )
+                await self.evt_slitWidth.set_write(
                     slit=Slit.ENTRY,
                     slitPosition=entrance_slit,
                     force_output=True,
                 )
 
                 exit_slit = await self.model.get_exit_slit()
-                self.evt_exitSlitWidth.set_put(width=exit_slit, force_output=True)
-                self.evt_slitWidth.set_put(
+                await self.evt_exitSlitWidth.set_write(
+                    width=exit_slit, force_output=True
+                )
+                await self.evt_slitWidth.set_write(
                     slit=Slit.EXIT,
                     slitPosition=exit_slit,
                     force_output=True,
