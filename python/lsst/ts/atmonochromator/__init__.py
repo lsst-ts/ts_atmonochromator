@@ -25,6 +25,6 @@ except ModuleNotFoundError:
     __version__ = "?"
 
 from .config_schema import *
-from .monochromator_csc import *
-from .model import *
 from .mock_controller import *
+from .model import *
+from .monochromator_csc import *

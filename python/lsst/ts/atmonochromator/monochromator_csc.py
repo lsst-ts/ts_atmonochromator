@@ -1,17 +1,16 @@
 import asyncio
+import contextlib
+import pathlib
 import traceback
 import typing
-import pathlib
-import contextlib
 
-from lsst.ts import salobj
-from lsst.ts import utils
-from lsst.ts.idl.enums.ATMonochromator import DetailedState, Status, Slit, ErrorCode
+from lsst.ts import salobj, utils
+from lsst.ts.idl.enums.ATMonochromator import DetailedState, ErrorCode, Slit, Status
 
-from .config_schema import CONFIG_SCHEMA
-from .model import Model, ModelReply
-from .mock_controller import MockController, SimulationConfiguration
 from . import __version__
+from .config_schema import CONFIG_SCHEMA
+from .mock_controller import MockController, SimulationConfiguration
+from .model import Model, ModelReply
 
 __all__ = ["MonochromatorCsc"]
 

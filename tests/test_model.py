@@ -24,7 +24,6 @@ import logging
 import unittest
 
 import numpy as np
-
 from lsst.ts import atmonochromator
 from lsst.ts.idl.enums.ATMonochromator import Status
 

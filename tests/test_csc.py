@@ -18,16 +18,13 @@
 #
 # You should have received a copy of the GNU General Public License
 
-import os
 import glob
+import os
 import pathlib
-import unittest
 import typing
+import unittest
 
-from lsst.ts import salobj
-
-from lsst.ts import atmonochromator
-
+from lsst.ts import atmonochromator, salobj
 from lsst.ts.idl.enums import ATMonochromator
 
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1].joinpath("tests", "data", "config")

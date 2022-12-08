@@ -1,13 +1,11 @@
-import enum
-import time
 import asyncio
+import enum
 import logging
+import time
 import typing
 
 from lsst.ts import utils
-
 from lsst.ts.idl.enums.ATMonochromator import Status as MonochromatorStatus
-
 
 __all__ = ["Model", "ModelReply"]
 
