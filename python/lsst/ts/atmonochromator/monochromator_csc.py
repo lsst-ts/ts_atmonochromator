@@ -12,7 +12,10 @@ from .config_schema import CONFIG_SCHEMA
 from .mock_controller import MockController, SimulationConfiguration
 from .model import Model, ModelReply
 
-__all__ = ["MonochromatorCsc"]
+__all__ = [
+    "MonochromatorCsc",
+    "run_atmonochromator",
+]
 
 # Timeout to disconnect the TCP/IP and close the mock controller (seconds)
 DISCONNECT_TIMEOUT = 10
@@ -518,3 +521,8 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             yield
         finally:
             await self.set_detailed_state(detailed_state=detailed_state_final)
+
+
+def run_atmonochromator():
+    """Run ATMonochromator CSC."""
+    asyncio.run(MonochromatorCsc.amain(index=False))
