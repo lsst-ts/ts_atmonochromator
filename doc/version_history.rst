@@ -6,6 +6,14 @@
 Version History
 ###############
 
+v0.3.1
+------
+
+* Include conda build scripts.
+* Update pre-commit configuration.
+* Update to pyproject.toml.
+* Rename executable.
+
 v0.3.0
 ------
 
