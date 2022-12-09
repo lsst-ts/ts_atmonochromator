@@ -1,19 +1,21 @@
 import asyncio
+import contextlib
+import pathlib
 import traceback
 import typing
-import pathlib
-import contextlib
 
-from lsst.ts import salobj
-from lsst.ts import utils
-from lsst.ts.idl.enums.ATMonochromator import DetailedState, Status, Slit, ErrorCode
+from lsst.ts import salobj, utils
+from lsst.ts.idl.enums.ATMonochromator import DetailedState, ErrorCode, Slit, Status
 
-from .config_schema import CONFIG_SCHEMA
-from .model import Model, ModelReply
-from .mock_controller import MockController, SimulationConfiguration
 from . import __version__
+from .config_schema import CONFIG_SCHEMA
+from .mock_controller import MockController, SimulationConfiguration
+from .model import Model, ModelReply
 
-__all__ = ["MonochromatorCsc"]
+__all__ = [
+    "MonochromatorCsc",
+    "run_atmonochromator",
+]
 
 # Timeout to disconnect the TCP/IP and close the mock controller (seconds)
 DISCONNECT_TIMEOUT = 10
@@ -368,7 +370,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await self.model.wait_ready("change wavelength")
 
                 wavelength = await self.model.get_wavelength()
-                self.evt_wavelength.set_put(wavelength=wavelength)
+                await self.evt_wavelength.set_write(wavelength=wavelength)
 
     async def do_power(self, data: salobj.type_hints.BaseMsgType) -> None:
         """Power up controller.
@@ -408,7 +410,9 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await self.model.wait_ready("select grating")
 
                 grating = await self.model.get_grating()
-                self.evt_selectedGrating.set_put(gratingType=grating, force_output=True)
+                await self.evt_selectedGrating.set_write(
+                    gratingType=grating, force_output=True
+                )
 
     async def do_updateMonochromatorSetup(
         self, data: salobj.type_hints.BaseMsgType
@@ -438,22 +442,30 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await self.model.wait_ready("update monochromator setup.")
 
                 wavelength = await self.model.get_wavelength()
-                self.evt_wavelength.set_put(wavelength=wavelength, force_output=True)
+                await self.evt_wavelength.set_write(
+                    wavelength=wavelength, force_output=True
+                )
 
                 grating = await self.model.get_grating()
-                self.evt_selectedGrating.set_put(gratingType=grating, force_output=True)
+                await self.evt_selectedGrating.set_write(
+                    gratingType=grating, force_output=True
+                )
 
                 entrance_slit = await self.model.get_entrance_slit()
-                self.evt_entrySlitWidth.set_put(width=entrance_slit, force_output=True)
-                self.evt_slitWidth.set_put(
+                await self.evt_entrySlitWidth.set_write(
+                    width=entrance_slit, force_output=True
+                )
+                await self.evt_slitWidth.set_write(
                     slit=Slit.ENTRY,
                     slitPosition=entrance_slit,
                     force_output=True,
                 )
 
                 exit_slit = await self.model.get_exit_slit()
-                self.evt_exitSlitWidth.set_put(width=exit_slit, force_output=True)
-                self.evt_slitWidth.set_put(
+                await self.evt_exitSlitWidth.set_write(
+                    width=exit_slit, force_output=True
+                )
+                await self.evt_slitWidth.set_write(
                     slit=Slit.EXIT,
                     slitPosition=exit_slit,
                     force_output=True,
@@ -509,3 +521,8 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             yield
         finally:
             await self.set_detailed_state(detailed_state=detailed_state_final)
+
+
+def run_atmonochromator():
+    """Run ATMonochromator CSC."""
+    asyncio.run(MonochromatorCsc.amain(index=False))
