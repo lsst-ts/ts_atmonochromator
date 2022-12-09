@@ -114,7 +114,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
 
     async def test_bin_script(self) -> None:
         await self.check_bin_script(
-            name="ATMonochromator", index=None, exe_name="atmonochromator_csc.py"
+            name="ATMonochromator", index=None, exe_name="run_atmonochromator"
         )
 
     async def test_config(self) -> None:
