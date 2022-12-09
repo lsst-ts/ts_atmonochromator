@@ -23,7 +23,6 @@ import typing
 import unittest
 
 import numpy as np
-
 from lsst.ts import atmonochromator
 
 # Standard timeout (seconds)

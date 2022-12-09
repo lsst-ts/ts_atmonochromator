@@ -1,0 +1,34 @@
+{% set data= load_setup_py_data() %}
+
+package:
+  name: ts-atmonochromator
+  version: {{ data.get('version') }}
+
+source:
+  path: ../
+
+build:
+  noarch: generic
+  script: {{ PYTHON }} -m pip install --no-deps --ignore-installed .
+
+requirements:
+  host:
+    - python {{ python }}
+    - pip
+    - setuptools_scm
+    - setuptools
+  build:
+    - python {{ python }}
+    - setuptools_scm
+    - setuptools
+    - ts-conda-build =0.3
+  run:
+    - python {{ python }}
+    - setuptools
+    - setuptools_scm
+    - ts-idl
+    - ts-salobj
+    - requests
+    - numpy
+    - astropy
+    - pillow

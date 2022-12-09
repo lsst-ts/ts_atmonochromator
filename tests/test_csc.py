@@ -18,16 +18,13 @@
 #
 # You should have received a copy of the GNU General Public License
 
-import os
 import glob
+import os
 import pathlib
-import unittest
 import typing
+import unittest
 
-from lsst.ts import salobj
-
-from lsst.ts import atmonochromator
-
+from lsst.ts import atmonochromator, salobj
 from lsst.ts.idl.enums import ATMonochromator
 
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1].joinpath("tests", "data", "config")
@@ -117,7 +114,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
 
     async def test_bin_script(self) -> None:
         await self.check_bin_script(
-            name="ATMonochromator", index=None, exe_name="atmonochromator_csc.py"
+            name="ATMonochromator", index=None, exe_name="run_atmonochromator"
         )
 
     async def test_config(self) -> None:
