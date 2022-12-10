@@ -35,6 +35,7 @@ class Model:
         self.connection_timeout = 10.0
         self.read_timeout = 10.0
         self.move_timeout = 60.0
+        self.move_grating_timeout = 180
 
         self.wait_ready_sleeptime = 0.5
 
@@ -295,6 +296,8 @@ class Model:
         """
         # Wait until controller is ready again
         start_time = time.time()
+
+        timeout=self.move_grating_timeout if 'grating' in cmd else self.move_timeout
         while True:
 
             status = await self.get_status()
