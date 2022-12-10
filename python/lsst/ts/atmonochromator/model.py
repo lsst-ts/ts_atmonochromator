@@ -35,6 +35,7 @@ class Model:
         self.connection_timeout = 10.0
         self.read_timeout = 10.0
         self.move_timeout = 60.0
+        self.move_grating_timeout = 300
 
         self.wait_ready_sleeptime = 0.5
 
@@ -295,12 +296,14 @@ class Model:
         """
         # Wait until controller is ready again
         start_time = time.time()
+
+        timeout = self.move_grating_timeout if "grating" in cmd else self.move_timeout
         while True:
 
             status = await self.get_status()
             if status == MonochromatorStatus.READY:
                 return True
-            elif time.time() > start_time + self.move_timeout:
+            elif time.time() > start_time + timeout:
                 raise TimeoutError(f"Setting up {cmd} timed out.")
             elif status == MonochromatorStatus.FAULT:
                 raise RuntimeError(
