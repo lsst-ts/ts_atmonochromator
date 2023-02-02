@@ -47,5 +47,5 @@ dev = [
   "tornado",
   "gphoto2",
   "rawpy",
-  "vimba",
+  "vimbapython @ git+https://github.com/alliedvision/vimbapython",
 ]
