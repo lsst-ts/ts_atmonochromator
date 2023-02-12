@@ -68,8 +68,11 @@ class Model:
             try:
                 writer.write_eof()
                 await asyncio.wait_for(writer.drain(), timeout=2)
-            finally:
                 writer.close()
+            except Exception:
+                self.log.exception("Failed to disconnect.")
+            finally:
+                writer = None
 
     async def reset_controller(self) -> ModelReply:
         """Reset controller.

@@ -9,5 +9,6 @@ __pycache__
 tests/.tests
 version.py
 .eggs
-*.egg_info
+*.egg-info
 .vscode
+build
