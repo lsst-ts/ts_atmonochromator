@@ -6,6 +6,12 @@
 Version History
 ###############
 
+v0.3.2
+------
+
+* Add except to try-finally clause when disconnecting.
+* Fix sconscript name.
+
 v0.3.1
 ------
 
