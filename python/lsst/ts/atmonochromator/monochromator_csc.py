@@ -80,6 +80,22 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.connect_task = utils.make_done_future()
 
     @property
+    def wavelength(self):
+        return self.evt_wavelength.data.wavelength
+
+    @property
+    def grating(self):
+        return self.evt_selectedGrating.data.gratingType
+
+    @property
+    def front_slit(self):
+        return self.evt_entrySlitWidth.data.width
+
+    @property
+    def exit_slit(self):
+        return self.evt_exitSlitWidth.data.width
+
+    @property
     def detailed_state(self) -> int:
         """Set or get the detailed state as a `DetailedState` enum.
 

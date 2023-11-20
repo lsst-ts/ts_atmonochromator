@@ -178,7 +178,10 @@ class Model:
         reply : ModelReply
 
         """
-        cmd_reply = await self.send_cmd(f"!WL {value}")
+        grating = await self.get_grating()
+        entry = await self.get_entrance_slit()
+        ex = await self.get_exit_slit()
+        cmd_reply = await self.send_cmd(f"!SET {value} {grating} {entry} {ex}")
         return ModelReply(cmd_reply)
 
     async def set_grating(self, value: int) -> ModelReply:
