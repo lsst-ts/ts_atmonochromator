@@ -2,9 +2,8 @@ import asyncio
 import enum
 import logging
 import time
-import typing
 
-from lsst.ts import utils
+from lsst.ts import tcpip, utils
 from lsst.ts.idl.enums.ATMonochromator import Status as MonochromatorStatus
 
 __all__ = ["Model", "ModelReply"]
@@ -40,39 +39,36 @@ class Model:
         self.wait_ready_sleeptime = 0.5
 
         self.connect_task = utils.make_done_future()
-        self._reader: typing.Optional[asyncio.StreamReader] = None
-        self._writer: typing.Optional[asyncio.StreamWriter] = None
+        self.client = tcpip.Client(host="", port=None, log=self.log)
 
         self.cmd_lock = asyncio.Lock()
         self.controller_ready = False
+
+    @property
+    def connected(self):
+        return self.client.connected
 
     async def connect(self, host: str, port: str) -> None:
         """Connect to the monochromator controller's TCP/IP port."""
         self.log.debug(f"connecting to: {host}:{port}")
         if self.connected:
             raise RuntimeError("Already connected")
-        self.connect_task = asyncio.open_connection(host=host, port=port)
-        self.reader, self.writer = await asyncio.wait_for(
-            self.connect_task, timeout=self.connection_timeout
-        )
+        self.client = tcpip.Client(host=host, port=port, log=self.log)
+        await self.client.start_task
 
         self.log.debug("connected")
 
     async def disconnect(self) -> None:
         """Disconnect from the monochromator controller's TCP/IP port."""
         self.log.debug("disconnect")
-        writer = self.writer
-        self._reset_reader_writer()
 
-        if writer:
-            try:
-                writer.write_eof()
-                await asyncio.wait_for(writer.drain(), timeout=2)
-                writer.close()
-            except Exception:
-                self.log.exception("Failed to disconnect.")
-            finally:
-                writer = None
+        try:
+            await self.client.close()
+        except Exception:
+            self.log.exception("Disconnect failed")
+        finally:
+            self.log.debug("Closing anyway.")
+            self.client = tcpip.Client(host="", port=None, log=self.log)
 
     async def reset_controller(self) -> ModelReply:
         """Reset controller.
@@ -320,34 +316,6 @@ class Model:
 
             await asyncio.sleep(self.wait_ready_sleeptime)
 
-    def _reset_reader_writer(self) -> None:
-        self._reader = None
-        self._writer = None
-
-    @property
-    def connected(self) -> bool:
-        if None in (self._reader, self._writer):
-            return False
-        return True
-
-    @property
-    def reader(self) -> asyncio.StreamReader:
-        assert isinstance(self._reader, asyncio.StreamReader)
-        return self._reader
-
-    @reader.setter
-    def reader(self, reader: asyncio.StreamReader) -> None:
-        self._reader = reader
-
-    @property
-    def writer(self) -> asyncio.StreamWriter:
-        assert isinstance(self._writer, asyncio.StreamWriter)
-        return self._writer
-
-    @writer.setter
-    def writer(self, writer: asyncio.StreamWriter) -> None:
-        self._writer = writer
-
     async def send_cmd(self, cmd: str, timeout: float = 2.0) -> str:
         """Send a command to the controller and wait for the reply.
 
@@ -369,10 +337,8 @@ class Model:
         async with self.cmd_lock:
             self.log.debug(f"Sending command of: {cmd}")
             # await asyncio.sleep(1)
-            self.writer.write(f"{cmd}\r\n".encode())
-            await self.writer.drain()
+            await self.client.write_str(cmd)
             # await asyncio.sleep(1)
-            read_bytes = await asyncio.wait_for(self.reader.readline(), timeout=timeout)
-            reply = read_bytes.decode().strip()
+            reply = await self.client.read_str()
             self.log.debug(f"Got reply of: {reply}")
             return reply

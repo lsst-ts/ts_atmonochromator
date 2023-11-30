@@ -41,9 +41,6 @@ class ModelTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.host = self.ctrl.config.host
 
-        self.reader = None
-        self.writer = None
-
         await asyncio.wait_for(self.ctrl.start(), timeout=STD_TIMEOUT)
         await self.model.connect(host=self.host, port=self.ctrl.port)
 
@@ -51,8 +48,6 @@ class ModelTestCase(unittest.IsolatedAsyncioTestCase):
         if self.ctrl is not None:
             await asyncio.wait_for(self.ctrl.stop(), timeout=STD_TIMEOUT)
             await self.model.disconnect()
-        if self.writer is not None:
-            self.writer.close()
 
     async def test_wavelength(self) -> None:
         # setup controller
