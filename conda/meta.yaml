@@ -28,6 +28,7 @@ requirements:
     - setuptools_scm
     - ts-idl
     - ts-salobj
+    - ts-tcpip
     - requests
     - numpy
     - astropy
