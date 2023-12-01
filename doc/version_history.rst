@@ -6,6 +6,12 @@
 Version History
 ###############
 
+v0.3.4
+------
+
+* Use !SET tcp command for changing wavelength.
+* Implement ts_tcpip Client for handling tcpip connection.
+
 v0.3.2
 ------
 
