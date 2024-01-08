@@ -33,8 +33,8 @@ class Model:
 
         self.connection_timeout = 10.0
         self.read_timeout = 10.0
-        self.move_timeout = 60.0
-        self.move_grating_timeout = 300
+        self.move_timeout = 120.0
+        self.move_grating_timeout = 500
 
         self.wait_ready_sleeptime = 0.5
 
