@@ -25,7 +25,7 @@ import unittest
 
 import numpy as np
 from lsst.ts import atmonochromator
-from lsst.ts.idl.enums.ATMonochromator import Status
+from lsst.ts.xml.enums.ATMonochromator import Status
 
 # Standard timeout (seconds)
 STD_TIMEOUT = 10

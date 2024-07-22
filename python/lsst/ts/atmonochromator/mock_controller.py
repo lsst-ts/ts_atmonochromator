@@ -4,7 +4,7 @@ import asyncio
 import logging
 import typing
 
-from lsst.ts.idl.enums.ATMonochromator import Status as MonochromatorStatus
+from lsst.ts.xml.enums.ATMonochromator import Status as MonochromatorStatus
 
 
 class SimulationConfiguration:

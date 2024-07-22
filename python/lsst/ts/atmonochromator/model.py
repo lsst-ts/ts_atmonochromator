@@ -4,7 +4,7 @@ import logging
 import time
 
 from lsst.ts import tcpip, utils
-from lsst.ts.idl.enums.ATMonochromator import Status as MonochromatorStatus
+from lsst.ts.xml.enums.ATMonochromator import Status as MonochromatorStatus
 
 __all__ = ["Model", "ModelReply"]
 

@@ -5,7 +5,7 @@ import traceback
 import typing
 
 from lsst.ts import salobj, utils
-from lsst.ts.idl.enums.ATMonochromator import DetailedState, ErrorCode, Slit, Status
+from lsst.ts.xml.enums.ATMonochromator import DetailedState, ErrorCode, Slit, Status
 
 from . import __version__
 from .config_schema import CONFIG_SCHEMA
@@ -325,7 +325,9 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             reply = await self.model.set_calibrate_wavelength(data.wavelength)
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply!r} from controller.")
-
+            await self.cmd_calibrateWavelength.ack_in_progress(
+                data=data, timeout=self.model.move_timeout, result=""
+            )
             await self.model.wait_ready("calibrate wavelength")
 
     async def do_changeSlitWidth(self, data: salobj.type_hints.BaseMsgType) -> None:
@@ -350,7 +352,9 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply!r} from controller.")
             else:
-
+                await self.cmd_changeSlitWidth.ack_in_progress(
+                    data=data, timeout=self.model.move_timeout, result=""
+                )
                 await self.model.wait_ready("change slit width")
 
                 if data.slit == Slit.ENTRY:
@@ -382,7 +386,11 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply} from controller.")
             else:
-
+                await self.cmd_changeWavelength(
+                    data=data,
+                    timeout=self.model.move_timeout,
+                    result="Waiting for wavelength change.",
+                )
                 await self.model.wait_ready("change wavelength")
 
                 wavelength = await self.model.get_wavelength()
@@ -423,6 +431,9 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply} from controller.")
             else:
+                await self.cmd_selectGrating.ack_in_progress(
+                    data=data, timeout=self.model.move_grating_timeout, result=""
+                )
                 await self.model.wait_ready("select grating")
 
                 grating = await self.model.get_grating()
@@ -455,6 +466,11 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply} from controller.")
             else:
+                await self.cmd_updateMonochromatorSetup.ack_in_progress(
+                    data=data,
+                    timeout=self.model.move_grating_timeout,
+                    result="Waiting for movement",
+                )
                 await self.model.wait_ready("update monochromator setup.")
 
                 wavelength = await self.model.get_wavelength()

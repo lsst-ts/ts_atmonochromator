@@ -12,3 +12,7 @@ version.py
 *.egg-info
 .vscode
 build
+.pre-commit-config.yaml
+.flake8
+.isort.cfg
+towncrier.toml
