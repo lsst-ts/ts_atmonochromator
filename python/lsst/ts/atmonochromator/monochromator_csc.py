@@ -271,6 +271,20 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.health_monitor_task = asyncio.create_task(self.health_monitor_loop())
         await self.set_detailed_state(DetailedState.READY)
 
+    async def end_disable(self, data) -> None:
+        if not self.connect_task.done():
+            self.cmd_disable.ack_in_progress(
+                data=data, timeout=self.model.connection_timeout, result=""
+            )
+        return await super().end_disable(data)
+
+    async def end_enable(self, data) -> None:
+        if not self.connect_task.done():
+            self.cmd_enable.ack_in_progress(
+                data=data, timeout=self.model.connection_timeout, result=""
+            )
+        return await super().end_enable(data)
+
     async def disconnect(self) -> None:
         """Disconnect from the hardware controller. A no-op if not connected.
 
