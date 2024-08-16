@@ -25,7 +25,7 @@ import typing
 import unittest
 
 from lsst.ts import atmonochromator, salobj
-from lsst.ts.idl.enums import ATMonochromator
+from lsst.ts.xml.enums import ATMonochromator
 
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1].joinpath("tests", "data", "config")
 
