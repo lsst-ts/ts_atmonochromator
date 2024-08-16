@@ -9,7 +9,7 @@ from lsst.ts.xml.enums.ATMonochromator import DetailedState, ErrorCode, Slit, St
 
 from . import __version__
 from .config_schema import CONFIG_SCHEMA
-from .mock_controller import MockController, SimulationConfiguration
+from .mock_controller import MockController, MockServer, SimulationConfiguration
 from .model import Model, ModelReply
 
 __all__ = [
@@ -78,6 +78,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self._mock_ctrl: typing.Optional[MockController] = None
 
         self.connect_task = utils.make_done_future()
+        self.mock_server = None
 
     @property
     def wavelength(self):
@@ -215,13 +216,13 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             host = self.evt_settingsAppliedMonoCommunication.data.ip
             port = self.evt_settingsAppliedMonoCommunication.data.portRange
         elif self.simulation_mode == 1:
-            self.mock_ctrl = MockController()
+            self.mock_server = MockServer()
             await asyncio.wait_for(
-                self.mock_ctrl.start(),
+                self.mock_server.start_task,
                 timeout=SimulationConfiguration().connection_timeout,
             )
-            host = self.mock_ctrl.config.host
-            port = self.mock_ctrl.port
+            host = self.mock_server.host
+            port = self.mock_server.port
         else:
             raise RuntimeError(f"Unsupported simulation_mode={self.simulation_mode}")
 
@@ -296,12 +297,13 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await asyncio.wait_for(self.model.disconnect(), DISCONNECT_TIMEOUT)
             except asyncio.TimeoutError:
                 self.log.warning("Timed out disconnecting from controller.")
-        if self.is_mock_ctrl_set():
+        if self.mock_server:
             try:
-                await self.mock_ctrl.stop(DISCONNECT_TIMEOUT)
+                await self.mock_server.close()
             except asyncio.TimeoutError:
                 self.log.warning("Timed out stopping the mock controller.")
-            self.reset_mock_ctrl()
+            finally:
+                self.mock_server = None
 
     async def handle_summary_state(self) -> None:
         """Called when the summary state has changed."""
@@ -521,9 +523,13 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         """Monitor the state of the hardware."""
 
         start_tai = utils.current_tai()
+        self.log.debug("starting health monitor loop.")
 
-        while self.summary_state == salobj.State.ENABLED:
+        while True:
             try:
+                self.log.debug(
+                    f"{self.model.connected=}, {self.model.should_be_connected=}"
+                )
                 controller_status = await self.model.get_status()
                 await self.evt_status.set_write(status=controller_status)
                 if controller_status == Status.FAULT:
@@ -538,12 +544,24 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await self.tel_loopTime.set_write(loopTime=curr_tai - start_tai)
                 await asyncio.sleep(self.heartbeat_interval)
             except Exception:
-                await self.fault(
-                    code=ErrorCode.MISC,
-                    report="Health monitor loop unexpectedly died.",
-                    traceback=traceback.format_exc(),
+                self.log.debug(
+                    f"{self.model.connected=}, {self.model.should_be_connected=}"
                 )
-                return
+                if not self.model.connected and self.model.should_be_connected:
+                    await self.fault(
+                        code=ErrorCode.MISC,
+                        report="Health monitor loop unexpectedly lost connection.",
+                        traceback=traceback.format_exc(),
+                    )
+                    self.log.debug("closing health monitor loop.")
+                    return
+                else:
+                    await self.fault(
+                        code=ErrorCode.MISC,
+                        report="Monitor health loop unexpectedly failed.",
+                        traceback=traceback.format_exc(),
+                    )
+                    return
 
     @contextlib.asynccontextmanager
     async def handle_detailed_state(

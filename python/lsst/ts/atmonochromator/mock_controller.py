@@ -4,6 +4,7 @@ import asyncio
 import logging
 import typing
 
+from lsst.ts import tcpip
 from lsst.ts.xml.enums.ATMonochromator import Status as MonochromatorStatus
 
 
@@ -23,6 +24,31 @@ class SimulationConfiguration:
         self.max_wavelength = 1130.0
         self.period = 1.0
         self.timeout = 5.0
+
+
+class MockServer(tcpip.OneClientReadLoopServer):
+    def __init__(self) -> None:
+        super().__init__(
+            port=0,
+            host=tcpip.LOCAL_HOST,
+            log=logging.getLogger("MockServer"),
+            connect_callback=self.connect_callback,
+        )
+        self.device = MockController()
+
+    async def read_and_dispatch(self) -> None:
+        line = await self.read_str()
+        self.log.debug(f"{line=}")
+        reply = await self.device.parse(line)
+        self.log.debug(f"{reply=}")
+        await self.write_str(reply)
+
+    @staticmethod
+    async def connect_callback(server):
+        if server.connected:
+            server.device.status = MonochromatorStatus.READY
+        else:
+            server.device.status = MonochromatorStatus.OFFLINE
 
 
 class MockController:
@@ -102,6 +128,21 @@ class MockController:
     @property
     def rejected(self) -> str:
         return "#RJCT"  # Rejected
+
+    async def parse(self, line):
+        if line[0] == "?":
+            cmd_name, cmd_parameters = line, None
+        else:
+            line = line.split(" ")
+            cmd_name, cmd_parameters = line[0], line[1:]
+        self.log.debug(f"{cmd_name=}, {cmd_parameters=}")
+        if cmd_name in self._cmds:
+            reply = await self._cmds[cmd_name](cmd_parameters)
+            self.log.debug(f"{reply=}")
+            return reply
+        else:
+            reply = "??"
+            return reply
 
     async def start(self) -> None:
         """Start the TCP/IP server, set start_task Done

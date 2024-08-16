@@ -48,6 +48,10 @@ class Model:
     def connected(self):
         return self.client.connected
 
+    @property
+    def should_be_connected(self):
+        return self.client.should_be_connected
+
     async def connect(self, host: str, port: str) -> None:
         """Connect to the monochromator controller's TCP/IP port."""
         self.log.debug(f"connecting to: {host}:{port}")
@@ -334,11 +338,17 @@ class Model:
         reply : str
             Response from controller.
         """
-        async with self.cmd_lock:
-            self.log.debug(f"Sending command of: {cmd}")
-            # await asyncio.sleep(1)
-            await self.client.write_str(cmd)
-            # await asyncio.sleep(1)
-            reply = await self.client.read_str()
-            self.log.debug(f"Got reply of: {reply}")
-            return reply
+        if self.connected:
+            async with self.cmd_lock:
+                self.log.debug(f"Sending command of: {cmd}")
+                # await asyncio.sleep(1)
+                await self.client.write_str(cmd)
+                # await asyncio.sleep(1)
+                reply = await self.client.read_str()
+                self.log.debug(f"Got reply of: {reply}")
+                return reply
+        else:
+            if self.should_be_connected:
+                raise RuntimeError("Client is unexpectedly disconnected.")
+            else:
+                raise RuntimeError("Client is not connected.")

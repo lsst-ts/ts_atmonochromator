@@ -18,6 +18,7 @@
 #
 # You should have received a copy of the GNU General Public License
 
+import asyncio
 import glob
 import os
 import pathlib
@@ -85,15 +86,15 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
             )
             await self.assert_next_sample(
                 topic=self.remote.evt_wavelength,
-                wavelength=self.csc.mock_ctrl.wavelength,
+                wavelength=self.csc.mock_server.device.wavelength,
             )
             await self.assert_next_sample(
                 topic=self.remote.evt_selectedGrating,
-                gratingType=self.csc.mock_ctrl.grating,
+                gratingType=self.csc.mock_server.device.grating,
             )
             entrance_slit = await self.assert_next_sample(
                 topic=self.remote.evt_entrySlitWidth,
-                width=self.csc.mock_ctrl.entrance_slit_position,
+                width=self.csc.mock_server.device.entrance_slit_position,
             )
             await self.assert_next_sample(
                 topic=self.remote.evt_slitWidth,
@@ -103,7 +104,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
 
             exit_slit = await self.assert_next_sample(
                 topic=self.remote.evt_exitSlitWidth,
-                width=self.csc.mock_ctrl.exit_slit_position,
+                width=self.csc.mock_server.device.exit_slit_position,
             )
 
             await self.assert_next_sample(
@@ -158,3 +159,9 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
                     "updateMonochromatorSetup",
                 )
             )
+
+    async def test_connection_failure(self):
+        async with self.make_csc(initial_state=salobj.State.ENABLED, simulation_mode=1):
+            await asyncio.sleep(1)
+            await self.csc.mock_server.close()
+            await self.assert_next_summary_state(state=salobj.State.FAULT, flush=True)
