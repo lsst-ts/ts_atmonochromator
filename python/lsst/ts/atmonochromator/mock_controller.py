@@ -4,6 +4,7 @@ import asyncio
 import logging
 import typing
 
+from lsst.ts import tcpip
 from lsst.ts.xml.enums.ATMonochromator import Status as MonochromatorStatus
 
 
@@ -23,6 +24,31 @@ class SimulationConfiguration:
         self.max_wavelength = 1130.0
         self.period = 1.0
         self.timeout = 5.0
+
+
+class MockServer(tcpip.OneClientReadLoopServer):
+    def __init__(self) -> None:
+        super().__init__(
+            port=0,
+            host=tcpip.LOCAL_HOST,
+            log=logging.getLogger("MockServer"),
+            connect_callback=self.connect_callback,
+        )
+        self.device = MockController()
+
+    async def read_and_dispatch(self) -> None:
+        line = await self.read_str()
+        self.log.debug(f"{line=}")
+        reply = await self.device.parse(line)
+        self.log.debug(f"{reply=}")
+        await self.write_str(reply)
+
+    @staticmethod
+    async def connect_callback(server):
+        if server.connected:
+            server.device.status = MonochromatorStatus.READY
+        else:
+            server.device.status = MonochromatorStatus.OFFLINE
 
 
 class MockController:
@@ -103,74 +129,20 @@ class MockController:
     def rejected(self) -> str:
         return "#RJCT"  # Rejected
 
-    async def start(self) -> None:
-        """Start the TCP/IP server, set start_task Done
-        and start the command loop.
-        """
-        self.status = MonochromatorStatus.SETTING_UP
-        self.server = await asyncio.start_server(
-            self.cmd_loop, host=self.config.host, port=0
-        )
-        num_sockets = len(self.server.sockets)
-        if num_sockets != 1:
-            raise RuntimeError(
-                "Listening on more than one socket; cannot determine port"
-            )
-        self.port = self.server.sockets[0].getsockname()[1]
-        self.log.info(
-            f"MockController server running: host={self.config.host}; port={self.port}"
-        )
-        self.status = MonochromatorStatus.READY
-
-    async def stop(self, timeout: float = 5.0) -> None:
-        """Stop the TCP/IP server."""
-        if self.server is None:
-            return
-
-        server = self.server
-        self.server = None
-        server.close()
-        await asyncio.wait_for(server.wait_closed(), timeout=timeout)
-        MonochromatorStatus.OFFLINE
-
-    async def cmd_loop(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
-    ) -> None:
-        """Execute the server control loop.
-
-        Parameters
-        ----------
-        reader : asyncio.StreamReader
-            Server stream reader.
-        writer : asyncio.StreamWrite
-            Server stream writer.
-        """
-        self.log.info("cmd_loop begins")
-
-        while True:
-            _line = (await reader.readline()).decode()
-            if not _line:
-                # connection lost; close the writer and exit the loop
-                writer.close()
-                return
-            self.log.debug(f"read command: {_line!r}")
-
-            line = _line.strip().split()
-            if line:
-                try:
-                    if len(line) > 0 and line[0] in self._cmds:
-                        reply = await self._cmds[line[0]](line[1:])
-                        self.log.debug(f"reply: {reply!r}")
-                        writer.write(f"{reply}\r\n".encode())
-                        await writer.drain()
-                    else:
-                        writer.write("??\r\n".encode())
-                        await writer.drain()
-                except Exception:
-                    writer.write("??\r\n".encode())
-                    await writer.drain()
-                    self.log.exception(f"command {line} failed")
-                await writer.drain()
+    async def parse(self, line):
+        if line[0] == "?":
+            cmd_name, cmd_parameters = line, None
+        else:
+            line = line.split(" ")
+            cmd_name, cmd_parameters = line[0], line[1:]
+        self.log.debug(f"{cmd_name=}, {cmd_parameters=}")
+        if cmd_name in self._cmds:
+            reply = await self._cmds[cmd_name](cmd_parameters)
+            self.log.debug(f"{reply=}")
+            return reply
+        else:
+            reply = "??"
+            return reply
 
     async def set_wl(self, args: typing.List[str]) -> str:
         """Set wavelength, range.
