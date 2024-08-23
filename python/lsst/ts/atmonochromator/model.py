@@ -4,7 +4,7 @@ import logging
 import time
 
 from lsst.ts import tcpip, utils
-from lsst.ts.idl.enums.ATMonochromator import Status as MonochromatorStatus
+from lsst.ts.xml.enums.ATMonochromator import Status as MonochromatorStatus
 
 __all__ = ["Model", "ModelReply"]
 
@@ -33,8 +33,8 @@ class Model:
 
         self.connection_timeout = 10.0
         self.read_timeout = 10.0
-        self.move_timeout = 60.0
-        self.move_grating_timeout = 300
+        self.move_timeout = 120.0
+        self.move_grating_timeout = 500
 
         self.wait_ready_sleeptime = 0.5
 
@@ -47,6 +47,10 @@ class Model:
     @property
     def connected(self):
         return self.client.connected
+
+    @property
+    def should_be_connected(self):
+        return self.client.should_be_connected
 
     async def connect(self, host: str, port: str) -> None:
         """Connect to the monochromator controller's TCP/IP port."""
@@ -334,11 +338,17 @@ class Model:
         reply : str
             Response from controller.
         """
-        async with self.cmd_lock:
-            self.log.debug(f"Sending command of: {cmd}")
-            # await asyncio.sleep(1)
-            await self.client.write_str(cmd)
-            # await asyncio.sleep(1)
-            reply = await self.client.read_str()
-            self.log.debug(f"Got reply of: {reply}")
-            return reply
+        if self.connected:
+            async with self.cmd_lock:
+                self.log.debug(f"Sending command of: {cmd}")
+                # await asyncio.sleep(1)
+                await self.client.write_str(cmd)
+                # await asyncio.sleep(1)
+                reply = await self.client.read_str()
+                self.log.debug(f"Got reply of: {reply}")
+                return reply
+        else:
+            if self.should_be_connected:
+                raise RuntimeError("Client is unexpectedly disconnected.")
+            else:
+                raise RuntimeError("Client is not connected.")

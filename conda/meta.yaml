@@ -8,28 +8,36 @@ source:
   path: ../
 
 build:
-  noarch: generic
+  noarch: python
   script: {{ PYTHON }} -m pip install --no-deps --ignore-installed .
+
+test:
+  requires:
+    - ts-conda-build =0.4
+    - ts-salobj {{salobj_version}}
+    - ts-idl {{idl_version}}
+  commands:
+    - pytest
+    - run_atmonochromator -h
+  imports:
+    - lsst.ts.atmonochromator
+  source_files:
+    - tests
+    - pyproject.toml
 
 requirements:
   host:
-    - python {{ python }}
+    - python {{python}}
     - pip
     - setuptools_scm
     - setuptools
   build:
-    - python {{ python }}
-    - setuptools_scm
-    - setuptools
-    - ts-conda-build =0.3
+    - python {{python}}
+    - ts-conda-build =0.4
   run:
-    - python {{ python }}
+    - python {{python}}
     - setuptools
     - setuptools_scm
     - ts-idl
     - ts-salobj
     - ts-tcpip
-    - requests
-    - numpy
-    - astropy
-    - pillow

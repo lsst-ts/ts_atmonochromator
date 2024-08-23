@@ -5,11 +5,11 @@ import traceback
 import typing
 
 from lsst.ts import salobj, utils
-from lsst.ts.idl.enums.ATMonochromator import DetailedState, ErrorCode, Slit, Status
+from lsst.ts.xml.enums.ATMonochromator import DetailedState, ErrorCode, Slit, Status
 
 from . import __version__
 from .config_schema import CONFIG_SCHEMA
-from .mock_controller import MockController, SimulationConfiguration
+from .mock_controller import MockServer, SimulationConfiguration
 from .model import Model, ModelReply
 
 __all__ = [
@@ -75,9 +75,8 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.want_connection = False
         self.health_monitor_task = utils.make_done_future()
 
-        self._mock_ctrl: typing.Optional[MockController] = None
-
         self.connect_task = utils.make_done_future()
+        self.mock_server = None
 
     @property
     def wavelength(self):
@@ -109,21 +108,6 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             If the new summary state is an invalid integer.
         """
         return self.evt_detailedState.data.detailedState
-
-    @property
-    def mock_ctrl(self) -> MockController:
-        assert isinstance(self._mock_ctrl, MockController)
-        return self._mock_ctrl
-
-    @mock_ctrl.setter
-    def mock_ctrl(self, mock_ctrl: MockController) -> None:
-        self._mock_ctrl = mock_ctrl
-
-    def reset_mock_ctrl(self) -> None:
-        self._mock_ctrl = None
-
-    def is_mock_ctrl_set(self) -> bool:
-        return self._mock_ctrl is not None
 
     async def set_detailed_state(self, detailed_state: DetailedState) -> None:
         """Set and publish detailed state.
@@ -215,13 +199,13 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             host = self.evt_settingsAppliedMonoCommunication.data.ip
             port = self.evt_settingsAppliedMonoCommunication.data.portRange
         elif self.simulation_mode == 1:
-            self.mock_ctrl = MockController()
+            self.mock_server = MockServer()
             await asyncio.wait_for(
-                self.mock_ctrl.start(),
+                self.mock_server.start_task,
                 timeout=SimulationConfiguration().connection_timeout,
             )
-            host = self.mock_ctrl.config.host
-            port = self.mock_ctrl.port
+            host = self.mock_server.host
+            port = self.mock_server.port
         else:
             raise RuntimeError(f"Unsupported simulation_mode={self.simulation_mode}")
 
@@ -271,6 +255,27 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.health_monitor_task = asyncio.create_task(self.health_monitor_loop())
         await self.set_detailed_state(DetailedState.READY)
 
+    async def begin_start(self, data):
+        if not self.connect_task.done():
+            self.cmd_start.ack_in_progress(
+                data=data, timeout=self.model.connection_timeout
+            )
+        return await super().begin_start(data)
+
+    async def end_disable(self, data) -> None:
+        if not self.connect_task.done():
+            self.cmd_disable.ack_in_progress(
+                data=data, timeout=self.model.connection_timeout, result=""
+            )
+        return await super().end_disable(data)
+
+    async def end_enable(self, data) -> None:
+        if not self.connect_task.done():
+            self.cmd_enable.ack_in_progress(
+                data=data, timeout=self.model.connection_timeout, result=""
+            )
+        return await super().end_enable(data)
+
     async def disconnect(self) -> None:
         """Disconnect from the hardware controller. A no-op if not connected.
 
@@ -282,12 +287,13 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await asyncio.wait_for(self.model.disconnect(), DISCONNECT_TIMEOUT)
             except asyncio.TimeoutError:
                 self.log.warning("Timed out disconnecting from controller.")
-        if self.is_mock_ctrl_set():
+        if self.mock_server:
             try:
-                await self.mock_ctrl.stop(DISCONNECT_TIMEOUT)
+                await self.mock_server.close()
             except asyncio.TimeoutError:
                 self.log.warning("Timed out stopping the mock controller.")
-            self.reset_mock_ctrl()
+            finally:
+                self.mock_server = None
 
     async def handle_summary_state(self) -> None:
         """Called when the summary state has changed."""
@@ -325,7 +331,9 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             reply = await self.model.set_calibrate_wavelength(data.wavelength)
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply!r} from controller.")
-
+            await self.cmd_calibrateWavelength.ack_in_progress(
+                data=data, timeout=self.model.move_timeout, result=""
+            )
             await self.model.wait_ready("calibrate wavelength")
 
     async def do_changeSlitWidth(self, data: salobj.type_hints.BaseMsgType) -> None:
@@ -350,7 +358,9 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply!r} from controller.")
             else:
-
+                await self.cmd_changeSlitWidth.ack_in_progress(
+                    data=data, timeout=self.model.move_timeout, result=""
+                )
                 await self.model.wait_ready("change slit width")
 
                 if data.slit == Slit.ENTRY:
@@ -382,7 +392,11 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply} from controller.")
             else:
-
+                await self.cmd_changeWavelength(
+                    data=data,
+                    timeout=self.model.move_timeout,
+                    result="Waiting for wavelength change.",
+                )
                 await self.model.wait_ready("change wavelength")
 
                 wavelength = await self.model.get_wavelength()
@@ -423,6 +437,9 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply} from controller.")
             else:
+                await self.cmd_selectGrating.ack_in_progress(
+                    data=data, timeout=self.model.move_grating_timeout, result=""
+                )
                 await self.model.wait_ready("select grating")
 
                 grating = await self.model.get_grating()
@@ -455,6 +472,11 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply} from controller.")
             else:
+                await self.cmd_updateMonochromatorSetup.ack_in_progress(
+                    data=data,
+                    timeout=self.model.move_grating_timeout,
+                    result="Waiting for movement",
+                )
                 await self.model.wait_ready("update monochromator setup.")
 
                 wavelength = await self.model.get_wavelength()
@@ -491,9 +513,13 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         """Monitor the state of the hardware."""
 
         start_tai = utils.current_tai()
+        self.log.debug("starting health monitor loop.")
 
-        while self.summary_state == salobj.State.ENABLED:
+        while True:
             try:
+                self.log.debug(
+                    f"{self.model.connected=}, {self.model.should_be_connected=}"
+                )
                 controller_status = await self.model.get_status()
                 await self.evt_status.set_write(status=controller_status)
                 if controller_status == Status.FAULT:
@@ -508,12 +534,24 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await self.tel_loopTime.set_write(loopTime=curr_tai - start_tai)
                 await asyncio.sleep(self.heartbeat_interval)
             except Exception:
-                await self.fault(
-                    code=ErrorCode.MISC,
-                    report="Health monitor loop unexpectedly died.",
-                    traceback=traceback.format_exc(),
+                self.log.debug(
+                    f"{self.model.connected=}, {self.model.should_be_connected=}"
                 )
-                return
+                if not self.model.connected and self.model.should_be_connected:
+                    await self.fault(
+                        code=ErrorCode.MISC,
+                        report="Health monitor loop unexpectedly lost connection.",
+                        traceback=traceback.format_exc(),
+                    )
+                    self.log.debug("closing health monitor loop.")
+                    return
+                else:
+                    await self.fault(
+                        code=ErrorCode.MISC,
+                        report="Monitor health loop unexpectedly failed.",
+                        traceback=traceback.format_exc(),
+                    )
+                    return
 
     @contextlib.asynccontextmanager
     async def handle_detailed_state(
