@@ -1,1 +1,0 @@
-CSC will transition to fault state if the connection is lost.
