@@ -9,7 +9,7 @@ from lsst.ts.xml.enums.ATMonochromator import DetailedState, ErrorCode, Slit, St
 
 from . import __version__
 from .config_schema import CONFIG_SCHEMA
-from .mock_controller import MockController, MockServer, SimulationConfiguration
+from .mock_controller import MockServer, SimulationConfiguration
 from .model import Model, ModelReply
 
 __all__ = [
@@ -75,8 +75,6 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.want_connection = False
         self.health_monitor_task = utils.make_done_future()
 
-        self._mock_ctrl: typing.Optional[MockController] = None
-
         self.connect_task = utils.make_done_future()
         self.mock_server = None
 
@@ -110,21 +108,6 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             If the new summary state is an invalid integer.
         """
         return self.evt_detailedState.data.detailedState
-
-    @property
-    def mock_ctrl(self) -> MockController:
-        assert isinstance(self._mock_ctrl, MockController)
-        return self._mock_ctrl
-
-    @mock_ctrl.setter
-    def mock_ctrl(self, mock_ctrl: MockController) -> None:
-        self._mock_ctrl = mock_ctrl
-
-    def reset_mock_ctrl(self) -> None:
-        self._mock_ctrl = None
-
-    def is_mock_ctrl_set(self) -> bool:
-        return self._mock_ctrl is not None
 
     async def set_detailed_state(self, detailed_state: DetailedState) -> None:
         """Set and publish detailed state.
@@ -271,6 +254,13 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         )
         self.health_monitor_task = asyncio.create_task(self.health_monitor_loop())
         await self.set_detailed_state(DetailedState.READY)
+
+    async def begin_start(self, data):
+        if not self.connect_task.done():
+            self.cmd_start.ack_in_progress(
+                data=data, timeout=self.model.connection_timeout
+            )
+        return await super().begin_start(data)
 
     async def end_disable(self, data) -> None:
         if not self.connect_task.done():

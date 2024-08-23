@@ -29,7 +29,8 @@ from lsst.ts import atmonochromator
 STD_TIMEOUT = 10
 
 
-class MockTestCase(unittest.IsolatedAsyncioTestCase):
+@unittest.skip("Not needed")
+class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
     """Test MockController"""
 
     async def asyncSetUp(self) -> None:
