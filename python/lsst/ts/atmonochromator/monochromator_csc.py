@@ -392,7 +392,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply} from controller.")
             else:
-                await self.cmd_changeWavelength(
+                await self.cmd_changeWavelength.ack_in_progress(
                     data=data,
                     timeout=self.model.move_timeout,
                     result="Waiting for wavelength change.",
