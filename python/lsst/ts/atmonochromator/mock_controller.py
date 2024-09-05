@@ -107,7 +107,7 @@ class MockController:
 
     @property
     def wavelength_range(self) -> typing.Tuple[float, float]:
-        return self.config.min_wavelength, self.config.min_wavelength
+        return self.config.min_wavelength, self.config.max_wavelength
 
     @property
     def ok(self) -> str:
@@ -174,6 +174,7 @@ class MockController:
             return self.rejected
 
         if not (self.wavelength_range[0] <= new_wl <= self.wavelength_range[1]):
+            self.log.error(f"{new_wl=} out of range; {self.wavelength_range}.")
             return self.our
 
         # Give control back to event loop for responsiveness and to simulate
@@ -442,18 +443,22 @@ class MockController:
 
         try:
             retval = await self.set_wl(args)
+            self.log.debug(f"set_wl({args}): {retval}")
             if retval != self.ok:
                 return retval
 
             retval = await self.set_gr(args[1:])
+            self.log.debug(f"set_gr({args[1:]}): {retval}")
             if retval != self.ok:
                 return retval
 
             retval = await self.set_ens(args[2:])
+            self.log.debug(f"set_ens({args[2:]}): {retval}")
             if retval != self.ok:
                 return retval
 
             retval = await self.set_exs(args[3:])
+            self.log.debug(f"set_exs({args[3:]}): {retval}")
             if retval != self.ok:
                 return retval
 
