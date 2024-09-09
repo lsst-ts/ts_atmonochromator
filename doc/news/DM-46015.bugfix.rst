@@ -1,0 +1,1 @@
+Fix in_progess call in do_changeWavelength.
