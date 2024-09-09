@@ -160,6 +160,126 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
                 )
             )
 
+    async def test_update_monochromator_setup(self):
+        async with self.make_csc(simulation_mode=1, initial_state=salobj.State.ENABLED):
+            self.remote.evt_slitWidth.flush()
+            self.remote.evt_wavelength.flush()
+            self.remote.evt_selectedGrating.flush()
+            self.remote.evt_entrySlitWidth.flush()
+            self.remote.evt_exitSlitWidth.flush()
+
+            await self.remote.cmd_updateMonochromatorSetup.set_start(
+                wavelength=600,
+                gratingType=ATMonochromator.Grating.RED,
+                fontEntranceSlitWidth=6,
+                fontExitSlitWidth=5,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_slitWidth,
+                slit=ATMonochromator.Slit.ENTRY,
+                slitPosition=6,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_slitWidth,
+                slit=ATMonochromator.Slit.EXIT,
+                slitPosition=5,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_wavelength,
+                wavelength=600,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_selectedGrating,
+                gratingType=ATMonochromator.Grating.RED,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_entrySlitWidth,
+                width=6,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_exitSlitWidth,
+                width=5,
+                timeout=STD_TIMEOUT,
+            )
+
+    async def test_change_wavelength(self):
+        async with self.make_csc(simulation_mode=1, initial_state=salobj.State.ENABLED):
+            wavelength = 500
+            self.remote.evt_wavelength.flush()
+            await self.remote.cmd_changeWavelength.set_start(
+                wavelength=wavelength,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_wavelength,
+                wavelength=wavelength,
+            )
+
+    async def test_change_slit_width_entry(self):
+        async with self.make_csc(simulation_mode=1, initial_state=salobj.State.ENABLED):
+            self.remote.evt_slitWidth.flush()
+            self.remote.evt_entrySlitWidth.flush()
+
+            await self.remote.cmd_changeSlitWidth.set_start(
+                slit=ATMonochromator.Slit.ENTRY,
+                slitWidth=6,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_slitWidth,
+                slit=ATMonochromator.Slit.ENTRY,
+                slitPosition=6,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_entrySlitWidth,
+                width=6,
+                timeout=STD_TIMEOUT,
+            )
+
+    async def test_change_slit_width_exit(self):
+        async with self.make_csc(simulation_mode=1, initial_state=salobj.State.ENABLED):
+            self.remote.evt_slitWidth.flush()
+            self.remote.evt_exitSlitWidth.flush()
+
+            await self.remote.cmd_changeSlitWidth.set_start(
+                slit=ATMonochromator.Slit.EXIT,
+                slitWidth=5,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_slitWidth,
+                slit=ATMonochromator.Slit.EXIT,
+                slitPosition=5,
+                timeout=STD_TIMEOUT,
+            )
+            await self.assert_next_sample(
+                self.remote.evt_exitSlitWidth,
+                width=5,
+                timeout=STD_TIMEOUT,
+            )
+
+    async def test_select_grating(self):
+        async with self.make_csc(simulation_mode=1, initial_state=salobj.State.ENABLED):
+            self.remote.evt_selectedGrating.flush()
+
+            for grating in ATMonochromator.Grating:
+                await self.remote.cmd_selectGrating.set_start(
+                    gratingType=grating,
+                    timeout=STD_TIMEOUT,
+                )
+                await self.assert_next_sample(
+                    self.remote.evt_selectedGrating,
+                    gratingType=grating,
+                    timeout=STD_TIMEOUT,
+                )
+
     async def test_connection_failure(self):
         async with self.make_csc(initial_state=salobj.State.ENABLED, simulation_mode=1):
             await asyncio.sleep(1)
