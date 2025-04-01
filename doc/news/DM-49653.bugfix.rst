@@ -1,0 +1,1 @@
+Pass initial state to CSC constructor call in unit tests.

@@ -36,7 +36,7 @@ LONG_TIMEOUT = 120.0
 
 class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
-        salobj.set_random_lsst_dds_partition_prefix()
+        salobj.set_test_topic_subname()
 
     def basic_make_csc(
         self,
@@ -120,7 +120,11 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
 
     async def test_config(self) -> None:
         """Test MonochromatorCsc configuration validator."""
-        async with self.make_csc(simulation_mode=1, config_dir=TEST_CONFIG_DIR):
+        async with self.make_csc(
+            initial_state=salobj.State.STANDBY,
+            simulation_mode=1,
+            config_dir=TEST_CONFIG_DIR,
+        ):
             await self.assert_next_summary_state(salobj.State.STANDBY)
 
             invalid_files = glob.glob(os.path.join(TEST_CONFIG_DIR, "invalid_*.yaml"))
@@ -148,7 +152,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
         * exitControl: STANDBY, FAULT to OFFLINE (quit)
         """
 
-        async with self.make_csc(simulation_mode=1):
+        async with self.make_csc(initial_state=salobj.State.STANDBY, simulation_mode=1):
             await self.check_standard_state_transitions(
                 enabled_commands=(
                     "changeWavelength",

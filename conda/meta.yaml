@@ -15,7 +15,7 @@ test:
   requires:
     - ts-conda-build =0.4
     - ts-salobj {{salobj_version}}
-    - ts-idl {{idl_version}}
+    - ts-xml {{xml_version}}
   commands:
     - pytest
     - run_atmonochromator -h
@@ -38,6 +38,6 @@ requirements:
     - python {{python}}
     - setuptools
     - setuptools_scm
-    - ts-idl
+    - ts-xml
     - ts-salobj
     - ts-tcpip
