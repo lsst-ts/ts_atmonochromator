@@ -4,7 +4,8 @@ import pathlib
 import traceback
 import typing
 
-from lsst.ts import salobj, utils
+from lsst.ts import utils
+from lsst.ts import salobj
 from lsst.ts.xml.enums.ATMonochromator import DetailedState, ErrorCode, Slit, Status
 
 from . import __version__
@@ -76,22 +77,22 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.health_monitor_task = utils.make_done_future()
 
         self.connect_task = utils.make_done_future()
-        self.mock_server = None
+        self.mock_server: typing.Optional[MockServer] = None
 
     @property
-    def wavelength(self):
+    def wavelength(self) -> float:
         return self.evt_wavelength.data.wavelength
 
     @property
-    def grating(self):
+    def grating(self) -> int:
         return self.evt_selectedGrating.data.gratingType
 
     @property
-    def front_slit(self):
+    def front_slit(self) -> int:
         return self.evt_entrySlitWidth.data.width
 
     @property
-    def exit_slit(self):
+    def exit_slit(self) -> int:
         return self.evt_exitSlitWidth.data.width
 
     @property
@@ -129,9 +130,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         """
         self.assert_enabled()
         if self.detailed_state != DetailedState.READY:
-            raise salobj.ExpectedError(
-                f"Detailed state={self.detailed_state!r} not READY"
-            )
+            raise salobj.ExpectedError(f"Detailed state={self.detailed_state!r} not READY")
 
     @staticmethod
     def get_config_pkg() -> str:
@@ -149,14 +148,12 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             self.log.debug("Standard operation mode.")
         elif self.simulation_mode == 1:
             self.log.warning(
-                f"Simulation mode {self.simulation_mode}. "
-                f"Using SimulationConfiguration instead."
+                f"Simulation mode {self.simulation_mode}. Using SimulationConfiguration instead."
             )
             config = SimulationConfiguration()
         else:
             raise RuntimeError(
-                f"Unspecified simulation mode: {self.simulation_mode}. "
-                f"Expecting either 0 or 1."
+                f"Unspecified simulation mode: {self.simulation_mode}. Expecting either 0 or 1."
             )
 
         await self.evt_settingsAppliedMonoCommunication.set_write(
@@ -200,6 +197,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             port = self.evt_settingsAppliedMonoCommunication.data.portRange
         elif self.simulation_mode == 1:
             self.mock_server = MockServer()
+            assert self.mock_server is not None
             await asyncio.wait_for(
                 self.mock_server.start_task,
                 timeout=SimulationConfiguration().connection_timeout,
@@ -225,8 +223,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         if controller_status != Status.READY:
             await self.fault(
                 code=ErrorCode.HARDWARE_NOT_READY,
-                report=f"Controller is not ready. Current status is "
-                f"{controller_status!r}",
+                report=f"Controller is not ready. Current status is {controller_status!r}",
             )
         else:
             await self.evt_status.set_write(status=controller_status)
@@ -255,25 +252,19 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.health_monitor_task = asyncio.create_task(self.health_monitor_loop())
         await self.set_detailed_state(DetailedState.READY)
 
-    async def begin_start(self, data):
+    async def begin_start(self, data: salobj.BaseMsgType) -> None:
         if not self.connect_task.done():
-            self.cmd_start.ack_in_progress(
-                data=data, timeout=self.model.connection_timeout
-            )
+            self.cmd_start.ack_in_progress(data=data, timeout=self.model.connection_timeout)
         return await super().begin_start(data)
 
-    async def end_disable(self, data) -> None:
+    async def end_disable(self, data: salobj.BaseMsgType) -> None:
         if not self.connect_task.done():
-            self.cmd_disable.ack_in_progress(
-                data=data, timeout=self.model.connection_timeout, result=""
-            )
+            self.cmd_disable.ack_in_progress(data=data, timeout=self.model.connection_timeout, result="")
         return await super().end_disable(data)
 
-    async def end_enable(self, data) -> None:
+    async def end_enable(self, data: salobj.BaseMsgType) -> None:
         if not self.connect_task.done():
-            self.cmd_enable.ack_in_progress(
-                data=data, timeout=self.model.connection_timeout, result=""
-            )
+            self.cmd_enable.ack_in_progress(data=data, timeout=self.model.connection_timeout, result="")
         return await super().end_enable(data)
 
     async def disconnect(self) -> None:
@@ -290,6 +281,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         if self.mock_server:
             try:
                 await self.mock_server.close()
+                await self.mock_server.done_task
             except asyncio.TimeoutError:
                 self.log.warning("Timed out stopping the mock controller.")
             finally:
@@ -311,12 +303,11 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                     )
                     raise e
         else:
-
             await self.set_detailed_state(DetailedState.NOT_ENABLED)
 
             await self.disconnect()
 
-    async def do_calibrateWavelength(self, data: salobj.type_hints.BaseMsgType) -> None:
+    async def do_calibrateWavelength(self, data: salobj.BaseMsgType) -> None:
         """Calibrate wavelength.
 
         Parameters
@@ -327,7 +318,6 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.assert_ready()
 
         async with self.handle_detailed_state(DetailedState.CALIBRATING_WAVELENGTH):
-
             reply = await self.model.set_calibrate_wavelength(data.wavelength)
             if reply != ModelReply.OK:
                 raise RuntimeError(f"Got {reply!r} from controller.")
@@ -336,7 +326,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             )
             await self.model.wait_ready("calibrate wavelength")
 
-    async def do_changeSlitWidth(self, data: salobj.type_hints.BaseMsgType) -> None:
+    async def do_changeSlitWidth(self, data: salobj.BaseMsgType) -> None:
         """Change slit width.
 
         Parameters
@@ -347,7 +337,6 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.assert_ready()
 
         async with self.handle_detailed_state(DetailedState.CHANGING_SLIT_WIDTH):
-
             if data.slit == Slit.ENTRY:
                 reply = await self.model.set_entrance_slit(data.slitWidth)
             elif data.slit == Slit.EXIT:
@@ -365,17 +354,13 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
 
                 if data.slit == Slit.ENTRY:
                     new_pos = await self.model.get_entrance_slit()
-                    await self.evt_entrySlitWidth.set_write(
-                        width=new_pos, force_output=True
-                    )
+                    await self.evt_entrySlitWidth.set_write(width=new_pos, force_output=True)
                 elif data.slit == Slit.EXIT:
                     new_pos = await self.model.get_exit_slit()
-                    await self.evt_exitSlitWidth.set_write(
-                        width=new_pos, force_output=True
-                    )
+                    await self.evt_exitSlitWidth.set_write(width=new_pos, force_output=True)
                 await self.evt_slitWidth.set_write(slit=data.slit, slitPosition=new_pos)
 
-    async def do_changeWavelength(self, data: salobj.type_hints.BaseMsgType) -> None:
+    async def do_changeWavelength(self, data: salobj.BaseMsgType) -> None:
         """Change wavelength.
 
         Parameters
@@ -386,7 +371,6 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.assert_ready()
 
         async with self.handle_detailed_state(DetailedState.CHANGING_WAVELENGTH):
-
             reply = await self.model.set_wavelength(data.wavelength)
 
             if reply != ModelReply.OK:
@@ -402,7 +386,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 wavelength = await self.model.get_wavelength()
                 await self.evt_wavelength.set_write(wavelength=wavelength)
 
-    async def do_power(self, data: salobj.type_hints.BaseMsgType) -> None:
+    async def do_power(self, data: salobj.BaseMsgType) -> None:
         """Power up controller.
 
         NOT IMPLEMENTED.
@@ -420,7 +404,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.assert_enabled()
         raise NotImplementedError("Power command not implemented.")
 
-    async def do_selectGrating(self, data: salobj.type_hints.BaseMsgType) -> None:
+    async def do_selectGrating(self, data: salobj.BaseMsgType) -> None:
         """Select grating.
 
         Parameters
@@ -431,7 +415,6 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.assert_ready()
 
         async with self.handle_detailed_state(DetailedState.SELECTING_GRATING):
-
             reply = await self.model.set_grating(data.gratingType)
 
             if reply != ModelReply.OK:
@@ -443,13 +426,9 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await self.model.wait_ready("select grating")
 
                 grating = await self.model.get_grating()
-                await self.evt_selectedGrating.set_write(
-                    gratingType=grating, force_output=True
-                )
+                await self.evt_selectedGrating.set_write(gratingType=grating, force_output=True)
 
-    async def do_updateMonochromatorSetup(
-        self, data: salobj.type_hints.BaseMsgType
-    ) -> None:
+    async def do_updateMonochromatorSetup(self, data: salobj.BaseMsgType) -> None:
         """Change wavelength, grating, entry and exit slit values at the same
         time.
 
@@ -461,7 +440,6 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
         self.assert_ready()
 
         async with self.handle_detailed_state(DetailedState.UPDATING_SETUP):
-
             reply = await self.model.set_all(
                 wavelength=data.wavelength,
                 grating=data.gratingType,
@@ -480,19 +458,13 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await self.model.wait_ready("update monochromator setup.")
 
                 wavelength = await self.model.get_wavelength()
-                await self.evt_wavelength.set_write(
-                    wavelength=wavelength, force_output=True
-                )
+                await self.evt_wavelength.set_write(wavelength=wavelength, force_output=True)
 
                 grating = await self.model.get_grating()
-                await self.evt_selectedGrating.set_write(
-                    gratingType=grating, force_output=True
-                )
+                await self.evt_selectedGrating.set_write(gratingType=grating, force_output=True)
 
                 entrance_slit = await self.model.get_entrance_slit()
-                await self.evt_entrySlitWidth.set_write(
-                    width=entrance_slit, force_output=True
-                )
+                await self.evt_entrySlitWidth.set_write(width=entrance_slit, force_output=True)
                 await self.evt_slitWidth.set_write(
                     slit=Slit.ENTRY,
                     slitPosition=entrance_slit,
@@ -500,9 +472,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 )
 
                 exit_slit = await self.model.get_exit_slit()
-                await self.evt_exitSlitWidth.set_write(
-                    width=exit_slit, force_output=True
-                )
+                await self.evt_exitSlitWidth.set_write(width=exit_slit, force_output=True)
                 await self.evt_slitWidth.set_write(
                     slit=Slit.EXIT,
                     slitPosition=exit_slit,
@@ -517,9 +487,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
 
         while True:
             try:
-                self.log.debug(
-                    f"{self.model.connected=}, {self.model.should_be_connected=}"
-                )
+                self.log.debug(f"{self.model.connected=}, {self.model.should_be_connected=}")
                 controller_status = await self.model.get_status()
                 await self.evt_status.set_write(status=controller_status)
                 if controller_status == Status.FAULT:
@@ -534,9 +502,7 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                 await self.tel_loopTime.set_write(loopTime=curr_tai - start_tai)
                 await asyncio.sleep(self.heartbeat_interval)
             except Exception:
-                self.log.debug(
-                    f"{self.model.connected=}, {self.model.should_be_connected=}"
-                )
+                self.log.debug(f"{self.model.connected=}, {self.model.should_be_connected=}")
                 if not self.model.connected and self.model.should_be_connected:
                     await self.fault(
                         code=ErrorCode.MISC,
@@ -552,6 +518,14 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
                         traceback=traceback.format_exc(),
                     )
                     return
+
+    async def close_tasks(self) -> None:
+        self.health_monitor_task.cancel()
+        await self.disconnect()
+        if self.mock_server:
+            await self.mock_server.close()
+            await self.mock_server.done_task
+        return await super().close_tasks()
 
     @contextlib.asynccontextmanager
     async def handle_detailed_state(
@@ -577,6 +551,6 @@ class MonochromatorCsc(salobj.ConfigurableCsc):
             await self.set_detailed_state(detailed_state=detailed_state_final)
 
 
-def run_atmonochromator():
+def run_atmonochromator() -> None:
     """Run ATMonochromator CSC."""
     asyncio.run(MonochromatorCsc.amain(index=False))

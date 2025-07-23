@@ -16,3 +16,5 @@ build
 .flake8
 .isort.cfg
 towncrier.toml
+.ruff.toml
+.mypy.ini

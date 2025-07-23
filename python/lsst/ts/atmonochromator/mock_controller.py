@@ -2,7 +2,7 @@ __all__ = ["MockController", "SimulationConfiguration"]
 
 import asyncio
 import logging
-import typing
+from typing import Awaitable, Callable, Optional, Tuple, List
 
 from lsst.ts import tcpip
 from lsst.ts.xml.enums.ATMonochromator import Status as MonochromatorStatus
@@ -34,7 +34,7 @@ class MockServer(tcpip.OneClientReadLoopServer):
             log=logging.getLogger("MockServer"),
             connect_callback=self.connect_callback,
         )
-        self.device = MockController()
+        self.device: MockController = MockController()
 
     async def read_and_dispatch(self) -> None:
         line = await self.read_str()
@@ -44,7 +44,7 @@ class MockServer(tcpip.OneClientReadLoopServer):
         await self.write_str(reply)
 
     @staticmethod
-    async def connect_callback(server):
+    async def connect_callback(server: "MockServer") -> None:
         if server.connected:
             server.device.status = MonochromatorStatus.READY
         else:
@@ -59,11 +59,11 @@ class MockController:
     """
 
     def __init__(self) -> None:
-        self.config = SimulationConfiguration()
+        self.config: SimulationConfiguration = SimulationConfiguration()
 
-        self.log = logging.getLogger("MockController")
+        self.log: logging.Logger = logging.getLogger("MockController")
 
-        self.server: typing.Optional[asyncio.base_events.Server] = None
+        self.server: Optional[asyncio.base_events.Server] = None
 
         self.wait_time = 0.1
 
@@ -82,7 +82,7 @@ class MockController:
 
         self.exit_slit_position = 0.0
 
-        self._cmds = {
+        self._cmds: dict[str, Callable[..., Awaitable[str]]] = {
             "!WL": self.set_wl,
             "!GR": self.set_gr,
             "!ENS": self.set_ens,
@@ -98,15 +98,15 @@ class MockController:
         }
 
     @property
-    def exit_slit_range(self) -> typing.Tuple[float, float]:
+    def exit_slit_range(self) -> Tuple[float, float]:
         return self.config.min_slit_width, self.config.max_slit_width
 
     @property
-    def entrance_slit_range(self) -> typing.Tuple[float, float]:
+    def entrance_slit_range(self) -> Tuple[float, float]:
         return self.config.min_slit_width, self.config.max_slit_width
 
     @property
-    def wavelength_range(self) -> typing.Tuple[float, float]:
+    def wavelength_range(self) -> Tuple[float, float]:
         return self.config.min_wavelength, self.config.max_wavelength
 
     @property
@@ -129,12 +129,12 @@ class MockController:
     def rejected(self) -> str:
         return "#RJCT"  # Rejected
 
-    async def parse(self, line):
+    async def parse(self, line: str) -> str:
         if line[0] == "?":
             cmd_name, cmd_parameters = line, None
         else:
-            line = line.split(" ")
-            cmd_name, cmd_parameters = line[0], line[1:]
+            split_line = line.split(" ")
+            cmd_name, cmd_parameters = split_line[0], split_line[1:]
         self.log.debug(f"{cmd_name=}, {cmd_parameters=}")
         if cmd_name in self._cmds:
             reply = await self._cmds[cmd_name](cmd_parameters)
@@ -144,7 +144,7 @@ class MockController:
             reply = "??"
             return reply
 
-    async def set_wl(self, args: typing.List[str]) -> str:
+    async def set_wl(self, args: List[str]) -> str:
         """Set wavelength, range.
 
         Parameters
@@ -192,7 +192,7 @@ class MockController:
 
         return self.ok
 
-    async def set_gr(self, args: typing.List[str]) -> str:
+    async def set_gr(self, args: List[str]) -> str:
         """Select grating.
 
         Parameters
@@ -233,7 +233,7 @@ class MockController:
 
         return self.ok
 
-    async def set_ens(self, args: typing.List[str]) -> str:
+    async def set_ens(self, args: List[str]) -> str:
         """Select entrance slit width.
 
         Parameters
@@ -273,7 +273,7 @@ class MockController:
 
         return self.ok
 
-    async def set_exs(self, args: typing.List[str]) -> str:
+    async def set_exs(self, args: List[str]) -> str:
         """Select exit slit width.
 
         Parameters
@@ -313,7 +313,7 @@ class MockController:
 
         return self.ok
 
-    async def set_clw(self, args: typing.List[str]) -> str:
+    async def set_clw(self, args: List[str]) -> str:
         """Calibrate the wavelength with the current value.
 
         Set the value for wavelength offset.
@@ -355,7 +355,7 @@ class MockController:
 
         return self.ok
 
-    async def set_rst(self, args: typing.List[str]) -> str:
+    async def set_rst(self, args: List[str]) -> str:
         """Reset device and go to initial state.
 
 
@@ -414,7 +414,7 @@ class MockController:
         self.log.debug("Done rst")
         return self.ok
 
-    async def set_set(self, args: typing.List[str]) -> str:
+    async def set_set(self, args: List[str]) -> str:
         """Set all parameters.
 
         Parameters
@@ -463,12 +463,11 @@ class MockController:
                 return retval
 
         except Exception:
-
             return self.rejected
         else:
             return self.ok
 
-    async def get_wl(self, args: typing.List[str]) -> str:
+    async def get_wl(self, args: None) -> str:
         """Return parsed string with current wavelength.
 
         Parameters
@@ -482,9 +481,9 @@ class MockController:
             A string consisting of "#WL {wavelength}"
 
         """
-        return f"#WL {self.wavelength+self.wavelength_offset}"
+        return f"#WL {self.wavelength + self.wavelength_offset}"
 
-    async def get_gr(self, args: typing.List[str]) -> str:
+    async def get_gr(self, args: None) -> str:
         """Return parsed string with current grating.
 
         Parameters
@@ -499,7 +498,7 @@ class MockController:
         """
         return f"#GR {self.grating}"
 
-    async def get_ens(self, args: typing.List[str]) -> str:
+    async def get_ens(self, args: None) -> str:
         """Return parsed string with current entrance slit position.
 
         Parameters
@@ -514,7 +513,7 @@ class MockController:
         """
         return f"#ENS {self.entrance_slit_position}"
 
-    async def get_exs(self, args: typing.List[str]) -> str:
+    async def get_exs(self, args: None) -> str:
         """Return parsed string with current exit slit position.
 
         Parameters
@@ -529,7 +528,7 @@ class MockController:
         """
         return f"#EXS {self.exit_slit_position}"
 
-    async def get_swst(self, args: typing.List[str]) -> str:
+    async def get_swst(self, args: None) -> str:
         """Query Software status
 
         Parameters

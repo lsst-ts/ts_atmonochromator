@@ -187,7 +187,6 @@ class ModelTestCase(unittest.IsolatedAsyncioTestCase):
                 assert current_ens == self.server.device.exit_slit_position
 
     async def test_set(self) -> None:
-
         # setup controller
         reply = await self.model.reset_controller()
         assert reply == atmonochromator.ModelReply.OK
@@ -209,9 +208,7 @@ class ModelTestCase(unittest.IsolatedAsyncioTestCase):
             3,
         )
 
-        for wave, gtr, es, ex in itertools.product(
-            wave_range, grt_range, es_range, ex_range
-        ):
+        for wave, gtr, es, ex in itertools.product(wave_range, grt_range, es_range, ex_range):
             with self.subTest(cmd=f"set({wave},{gtr},{es},{ex})"):
                 reply = await self.model.set_all(wave, gtr, es, ex)
                 assert reply == atmonochromator.ModelReply.OK
@@ -221,7 +218,6 @@ class ModelTestCase(unittest.IsolatedAsyncioTestCase):
                 assert ex == self.server.device.exit_slit_position
 
     async def test_status(self) -> None:
-
         reply = await self.model.reset_controller()
         assert reply == atmonochromator.ModelReply.OK
 
