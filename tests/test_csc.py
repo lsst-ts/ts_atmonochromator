@@ -25,7 +25,8 @@ import pathlib
 import typing
 import unittest
 
-from lsst.ts import atmonochromator, salobj
+from lsst.ts import atmonochromator
+from lsst.ts import salobj
 from lsst.ts.xml.enums import ATMonochromator
 
 TEST_CONFIG_DIR = pathlib.Path(__file__).parents[1].joinpath("tests", "data", "config")
@@ -44,7 +45,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
         config_dir: typing.Union[str, pathlib.Path, None],
         simulation_mode: int,
         override: str = "",
-    ) -> salobj.base_csc.BaseCsc:
+    ) -> atmonochromator.MonochromatorCsc:
         return atmonochromator.MonochromatorCsc(
             initial_state=initial_state,
             config_dir=config_dir,
@@ -53,9 +54,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
         )
 
     async def test_basics(self) -> None:
-
         async with self.make_csc(initial_state=salobj.State.ENABLED, simulation_mode=1):
-
             # check settings applied events
             sim_config = atmonochromator.SimulationConfiguration()
             await self.assert_next_sample(
@@ -81,9 +80,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
                 period=sim_config.period,
                 timeout=sim_config.timeout,
             )
-            await self.assert_next_sample(
-                topic=self.remote.evt_status, status=ATMonochromator.Status.READY
-            )
+            await self.assert_next_sample(topic=self.remote.evt_status, status=ATMonochromator.Status.READY)
             await self.assert_next_sample(
                 topic=self.remote.evt_wavelength,
                 wavelength=self.csc.mock_server.device.wavelength,
@@ -114,9 +111,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
             )
 
     async def test_bin_script(self) -> None:
-        await self.check_bin_script(
-            name="ATMonochromator", index=None, exe_name="run_atmonochromator"
-        )
+        await self.check_bin_script(name="ATMonochromator", index=None, exe_name="run_atmonochromator")
 
     async def test_config(self) -> None:
         """Test MonochromatorCsc configuration validator."""
@@ -164,7 +159,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
                 )
             )
 
-    async def test_update_monochromator_setup(self):
+    async def test_update_monochromator_setup(self) -> None:
         async with self.make_csc(simulation_mode=1, initial_state=salobj.State.ENABLED):
             self.remote.evt_slitWidth.flush()
             self.remote.evt_wavelength.flush()
@@ -212,7 +207,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
                 timeout=STD_TIMEOUT,
             )
 
-    async def test_change_wavelength(self):
+    async def test_change_wavelength(self) -> None:
         async with self.make_csc(simulation_mode=1, initial_state=salobj.State.ENABLED):
             wavelength = 500
             self.remote.evt_wavelength.flush()
@@ -225,7 +220,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
                 wavelength=wavelength,
             )
 
-    async def test_change_slit_width_entry(self):
+    async def test_change_slit_width_entry(self) -> None:
         async with self.make_csc(simulation_mode=1, initial_state=salobj.State.ENABLED):
             self.remote.evt_slitWidth.flush()
             self.remote.evt_entrySlitWidth.flush()
@@ -247,7 +242,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
                 timeout=STD_TIMEOUT,
             )
 
-    async def test_change_slit_width_exit(self):
+    async def test_change_slit_width_exit(self) -> None:
         async with self.make_csc(simulation_mode=1, initial_state=salobj.State.ENABLED):
             self.remote.evt_slitWidth.flush()
             self.remote.evt_exitSlitWidth.flush()
@@ -269,7 +264,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
                 timeout=STD_TIMEOUT,
             )
 
-    async def test_select_grating(self):
+    async def test_select_grating(self) -> None:
         async with self.make_csc(simulation_mode=1, initial_state=salobj.State.ENABLED):
             self.remote.evt_selectedGrating.flush()
 
@@ -284,7 +279,7 @@ class TestATMonochromatorCSC(salobj.BaseCscTestCase, unittest.IsolatedAsyncioTes
                     timeout=STD_TIMEOUT,
                 )
 
-    async def test_connection_failure(self):
+    async def test_connection_failure(self) -> None:
         async with self.make_csc(initial_state=salobj.State.ENABLED, simulation_mode=1):
             await asyncio.sleep(1)
             await self.csc.mock_server.close()

@@ -3,7 +3,8 @@ import enum
 import logging
 import time
 
-from lsst.ts import tcpip, utils
+from lsst.ts import tcpip
+from lsst.ts import utils
 from lsst.ts.xml.enums.ATMonochromator import Status as MonochromatorStatus
 
 __all__ = ["Model", "ModelReply"]
@@ -24,11 +25,8 @@ class Model:
     """
 
     def __init__(self, log: logging.Logger) -> None:
-
         self.log = (
-            logging.getLogger(type(self).__name__)
-            if log is None
-            else log.getChild(type(self).__name__)
+            logging.getLogger(type(self).__name__) if log is None else log.getChild(type(self).__name__)
         )
 
         self.connection_timeout = 10.0
@@ -45,14 +43,14 @@ class Model:
         self.controller_ready = False
 
     @property
-    def connected(self):
+    def connected(self) -> bool:
         return self.client.connected
 
     @property
-    def should_be_connected(self):
+    def should_be_connected(self) -> bool:
         return self.client.should_be_connected
 
-    async def connect(self, host: str, port: str) -> None:
+    async def connect(self, host: str, port: int) -> None:
         """Connect to the monochromator controller's TCP/IP port."""
         self.log.debug(f"connecting to: {host}:{port}")
         if self.connected:
@@ -270,12 +268,8 @@ class Model:
         reply : ModelReply
 
         """
-        self.log.debug(
-            f"Setting all: {wavelength} {grating} {entrance_slit} {exit_slit}"
-        )
-        cmd_reply = await self.send_cmd(
-            f"!SET {wavelength} {grating} {entrance_slit} {exit_slit}"
-        )
+        self.log.debug(f"Setting all: {wavelength} {grating} {entrance_slit} {exit_slit}")
+        cmd_reply = await self.send_cmd(f"!SET {wavelength} {grating} {entrance_slit} {exit_slit}")
         return ModelReply(cmd_reply)
 
     async def wait_ready(self, cmd: str) -> bool:
@@ -305,22 +299,19 @@ class Model:
 
         timeout = self.move_grating_timeout if "grating" in cmd else self.move_timeout
         while True:
-
             status = await self.get_status()
             if status == MonochromatorStatus.READY:
                 return True
             elif time.time() > start_time + timeout:
                 raise TimeoutError(f"Setting up {cmd} timed out.")
             elif status == MonochromatorStatus.FAULT:
-                raise RuntimeError(
-                    f"Controller in FAULT state while checking for {cmd}."
-                )
+                raise RuntimeError(f"Controller in FAULT state while checking for {cmd}.")
             elif status == MonochromatorStatus.OFFLINE:
                 raise RuntimeError(f"Controller OFFLINE while checking for {cmd}.")
 
             await asyncio.sleep(self.wait_ready_sleeptime)
 
-    async def send_cmd(self, cmd: str, timeout: float = 2.0) -> str:
+    async def send_cmd(self, cmd: str, timeout: float = 5.0) -> str:
         """Send a command to the controller and wait for the reply.
 
         Return the decoded reply as 0 or more lines of text

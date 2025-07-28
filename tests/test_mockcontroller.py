@@ -37,9 +37,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         self.ctrl = atmonochromator.MockController()
 
         await asyncio.wait_for(self.ctrl.start(), timeout=STD_TIMEOUT)
-        rw_coro = asyncio.open_connection(
-            host=self.ctrl.config.host, port=self.ctrl.port
-        )
+        rw_coro = asyncio.open_connection(host=self.ctrl.config.host, port=self.ctrl.port)
         self.reader, self.writer = await asyncio.wait_for(rw_coro, timeout=STD_TIMEOUT)
 
     async def asyncTearDown(self) -> None:
@@ -50,9 +48,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
             await self.writer.drain()
             self.writer.close()
 
-    async def send_cmd(
-        self, cmd: str, timeout: typing.Union[int, float] = STD_TIMEOUT
-    ) -> str:
+    async def send_cmd(self, cmd: str, timeout: typing.Union[int, float] = STD_TIMEOUT) -> str:
         """Send a command to the mock controller and wait for the reply.
 
         Return the decoded reply as 0 or more lines of text
@@ -99,17 +95,13 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         current_wave = float(self.ctrl.wavelength)
 
         # Test below minimum value
-        reply_lines = await self.send_cmd(
-            f"!WL {self.ctrl.wavelength_range[0]-10.}\r\n"
-        )
+        reply_lines = await self.send_cmd(f"!WL {self.ctrl.wavelength_range[0] - 10.0}\r\n")
         status = reply_lines.split()
         assert status[0] == self.ctrl.our
         assert current_wave == self.ctrl.wavelength
 
         # Test above maximum value
-        reply_lines = await self.send_cmd(
-            f"!WL {self.ctrl.wavelength_range[1]+10.}\r\n"
-        )
+        reply_lines = await self.send_cmd(f"!WL {self.ctrl.wavelength_range[1] + 10.0}\r\n")
         status = reply_lines.split()
         assert status[0] == self.ctrl.our
         assert current_wave == self.ctrl.wavelength
@@ -232,9 +224,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         max_w = self.ctrl.wavelength_range[1]
         min_w = self.ctrl.wavelength_range[0]
         wavelength = np.random.random() * (max_w - min_w) + min_w
-        grating = np.random.randint(
-            self.ctrl.grating_options[0], self.ctrl.grating_options[-1]
-        )
+        grating = np.random.randint(self.ctrl.grating_options[0], self.ctrl.grating_options[-1])
 
         max_f = self.ctrl.entrance_slit_range[1]
         min_f = self.ctrl.entrance_slit_range[0]
@@ -245,9 +235,7 @@ class MockControllerTestCase(unittest.IsolatedAsyncioTestCase):
         min_e = self.ctrl.exit_slit_range[0]
         exit_slit = np.random.random() * (max_e - min_e) + min_e
 
-        reply_lines = await self.send_cmd(
-            f"!SET {wavelength} " f"{grating} " f"{front_slit} " f"{exit_slit}\r\n"
-        )
+        reply_lines = await self.send_cmd(f"!SET {wavelength} {grating} {front_slit} {exit_slit}\r\n")
         status = reply_lines.split()
         assert status[0] == self.ctrl.ok
         assert wavelength == self.ctrl.wavelength

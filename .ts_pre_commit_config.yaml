@@ -5,6 +5,6 @@ clang-format: false
 flake8: true
 format-xmllint: false
 isort: true
-mypy: false
-ruff: false
+mypy: true
+ruff: true
 towncrier: true
