@@ -1,3 +1,22 @@
+v0.5.2 (2025-08-12)
+===================
+
+Bug Fixes
+---------
+
+- Fix in_progess call in do_changeWavelength. (`DM-46015 <https://rubinobs.atlassian.net//browse/DM-46015>`_)
+- Fix wavelength_range method in MockController. (`DM-46015 <https://rubinobs.atlassian.net//browse/DM-46015>`_)
+- Pass initial state to CSC constructor call in unit tests. (`DM-49653 <https://rubinobs.atlassian.net//browse/DM-49653>`_)
+- Fixed version field generation. (`OSW-721 <https://rubinobs.atlassian.net//browse/OSW-721>`_)
+
+
+Other Changes and Additions
+---------------------------
+
+- Add unit tests for CSC commands. (`DM-46015 <https://rubinobs.atlassian.net//browse/DM-46015>`_)
+- Improved type hints. (`OSW-721 <https://rubinobs.atlassian.net//browse/OSW-721>`_)
+
+
 0.5.0 (2024-08-23)
 ==================
 
